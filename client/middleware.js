@@ -31,28 +31,26 @@ export async function middleware(request) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // refresh use session
+  const { data: { user } } = await supabase.auth.getUser();
 
-  // Protected routes logic
+  const isLoginPage = request.nextUrl.pathname === "/login";
   const isProtectedPath =
     request.nextUrl.pathname.startsWith("/dashboard") ||
     request.nextUrl.pathname.startsWith("/analytics");
 
+  // If no user and trying to access protected route -> login
   if (isProtectedPath && !user) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
-  // Redirect to dashboard/analytics if logged in and trying to access /login
-  if (request.nextUrl.pathname === "/login" && user) {
-    // For simplicity in middleware, we redirect to "/" and let the client-side
-    // or further server-side logic decide the specific role-based dashboard.
-    // Or we could fetch the profile here, but it's more efficient to do it once in the login flow.
+  // If user exists and is on the login page -> bounce to home/dashboard
+  // The login/page.jsx Server Component also handles this, but middleware is faster
+  if (isLoginPage && user) {
     const url = request.nextUrl.clone();
-    url.pathname = "/"; 
+    url.pathname = "/"; // Send to home and let the server page decide more specific role-redirect
     return NextResponse.redirect(url);
   }
 
