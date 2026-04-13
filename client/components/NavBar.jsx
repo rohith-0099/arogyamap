@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Map, Mic, LayoutDashboard, BarChart3, LogOut } from "lucide-react";
+import { Map, Mic, LayoutDashboard, BarChart3, LogOut, Sun, Moon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 const navItems = [
@@ -18,6 +18,30 @@ export default function NavBar() {
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [theme, setTheme] = useState("dark");
+
+  useEffect(() => {
+    const saved = localStorage.getItem("app-theme");
+    const initial = saved === "light" ? "light" : "dark";
+    applyTheme(initial);
+    setTheme(initial);
+  }, []);
+
+  function applyTheme(t) {
+    const html = document.documentElement;
+    html.classList.remove("light", "dark");
+    html.classList.add(t);
+    localStorage.setItem("app-theme", t);
+    // Keep map-theme in sync for components that read it (MapView, MicParticles)
+    localStorage.setItem("map-theme", t);
+    window.dispatchEvent(new Event("storage"));
+  }
+
+  function toggleTheme() {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    applyTheme(next);
+  }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -68,6 +92,15 @@ export default function NavBar() {
               </Link>
             );
           })}
+
+          {/* Theme toggle */}
+          <button
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            className="flex items-center justify-center w-9 h-9 rounded-lg text-gray-400 hover:text-white hover:bg-dark-600 transition-all ml-1"
+          >
+            {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
 
           {/* Logout — only shown when authenticated */}
           {user && (

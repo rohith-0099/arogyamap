@@ -14,12 +14,19 @@ const URGENCY_COLORS = {
 };
 
 const KERALA_CENTER = [10.8505, 76.2711];
-const CARTO_TILE_URL =
-  "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+// NOTE: no {r} retina suffix — CartoDB's dark_all endpoint 404s on @2x tiles
+// at some zoom levels which rendered as black "holes" on retina screens.
+const TILE_URLS = {
+  dark: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+  light: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+};
+// 1×1 transparent gif — shown instead of a broken tile, so no hole remains.
+const BLANK_TILE =
+  "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
 const CARTO_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
-function MapInner({ reports, outbreakClusters }) {
+function MapInner({ reports, outbreakClusters, theme }) {
   const {
     MapContainer,
     TileLayer,
@@ -29,6 +36,25 @@ function MapInner({ reports, outbreakClusters }) {
     useMap,
   } = require("react-leaflet");
 
+  // Force Leaflet to recompute its size + refetch any skipped tiles
+  // once the parent layout has finished painting.
+  function TileRefresh() {
+    const map = useMap();
+    useEffect(() => {
+      const kick = () => map.invalidateSize();
+      kick();
+      const t1 = setTimeout(kick, 120);
+      const t2 = setTimeout(kick, 600);
+      window.addEventListener("resize", kick);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        window.removeEventListener("resize", kick);
+      };
+    }, [map]);
+    return null;
+  }
+
   return (
     <MapContainer
       center={KERALA_CENTER}
@@ -36,13 +62,25 @@ function MapInner({ reports, outbreakClusters }) {
       style={{ height: "100%", width: "100%" }}
       zoomControl={false}
       attributionControl={true}
+      preferCanvas={false}
+      worldCopyJump={true}
     >
       <TileLayer
-        url={CARTO_TILE_URL}
+        key={theme}
+        url={TILE_URLS[theme]}
         attribution={CARTO_ATTRIBUTION}
-        subdomains="abcd"
-        maxZoom={20}
+        subdomains={["a", "b", "c", "d"]}
+        maxZoom={19}
+        minZoom={3}
+        tileSize={256}
+        detectRetina={false}
+        keepBuffer={4}
+        updateWhenIdle={false}
+        updateWhenZooming={false}
+        crossOrigin={true}
+        errorTileUrl={BLANK_TILE}
       />
+      <TileRefresh />
       <ZoomControl position="topright" />
 
       {/* Outbreak cluster rings */}
@@ -133,10 +171,21 @@ export default function MapView() {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ total: 0, high: 0, medium: 0, low: 0 });
   const [MapReady, setMapReady] = useState(false);
+  const [theme, setTheme] = useState("dark");
 
-  // Dynamic import Leaflet only client-side
   useEffect(() => {
     setMapReady(true);
+    const read = () => {
+      const saved = localStorage.getItem("app-theme") || localStorage.getItem("map-theme");
+      if (saved === "light" || saved === "dark") setTheme(saved);
+    };
+    read();
+    window.addEventListener("storage", read);
+    const iv = setInterval(read, 500);
+    return () => {
+      window.removeEventListener("storage", read);
+      clearInterval(iv);
+    };
   }, []);
 
   // Load initial reports
@@ -279,7 +328,13 @@ export default function MapView() {
         </div>
       )}
 
-      {MapReady && <DynamicMap reports={reports} outbreakClusters={outbreakClusters} />}
+      {MapReady && (
+        <DynamicMap
+          reports={reports}
+          outbreakClusters={outbreakClusters}
+          theme={theme}
+        />
+      )}
     </div>
   );
 }

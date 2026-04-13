@@ -49,11 +49,6 @@ const SYMPTOM_COLORS = {
   other: "#9966ff",
 };
 
-const DISTRICTS = [
-  "Thiruvananthapuram", "Kochi", "Kozhikode", "Thrissur", "Kannur",
-  "Malappuram", "Kollam", "Palakkad",
-];
-
 const CHART_DEFAULTS = {
   responsive: true,
   maintainAspectRatio: false,
@@ -107,16 +102,23 @@ function buildEpidemicData(reports) {
 }
 
 function buildDistrictData(reports) {
-  const scores = DISTRICTS.map((district) => {
-    const distReports = reports.filter(
-      (r) => r.city?.toLowerCase().includes(district.toLowerCase().split(" ")[0])
-    );
-    const highCount = distReports.filter((r) => r.urgency === "high").length;
-    const score = distReports.length + highCount * 2;
-    return { district, score, count: distReports.length };
-  });
+  // Derive districts directly from report rows (no hardcoded list)
+  const byDistrict = {};
+  for (const r of reports) {
+    const d = r.district || r.city || "Unassigned";
+    if (!byDistrict[d]) byDistrict[d] = { district: d, count: 0, high: 0 };
+    byDistrict[d].count += 1;
+    if (r.urgency === "high") byDistrict[d].high += 1;
+  }
+
+  const scores = Object.values(byDistrict).map((x) => ({
+    district: x.district,
+    count: x.count,
+    score: x.count + x.high * 2,
+  }));
 
   scores.sort((a, b) => b.score - a.score);
+  scores.splice(12); // top 12 districts only
 
   return {
     labels: scores.map((s) => s.district),

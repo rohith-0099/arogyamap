@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 from functools import lru_cache
 from pathlib import Path
@@ -108,7 +109,47 @@ def _point_in_polygon(lat: float, lng: float) -> tuple[Optional[str], Optional[s
         if zone["polygon"].contains(pt):
             return zone["zone_name"], zone["district"]
 
+    # Nearest-zone fallback: point fell into a gap between polygons.
+    # Pick the zone whose polygon boundary is closest to the point.
+    if _zone_polygons:
+        nearest = min(_zone_polygons, key=lambda z: z["polygon"].distance(pt))
+        if nearest["polygon"].distance(pt) < 0.5:  # ~50km guard
+            return nearest["zone_name"], nearest["district"]
+
     return None, None
+
+
+def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    r = 6371.0
+    p1 = math.radians(lat1)
+    p2 = math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lng2 - lng1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+def _nearest_city(lat: float, lng: float, max_km: float = 40.0) -> Optional[tuple[str, dict]]:
+    """Return (city_key, city_info) for the nearest city in city_lookup within max_km."""
+    lookup = _load_city_lookup()
+    if not lookup:
+        return None
+    best_key = None
+    best_info = None
+    best_d = float("inf")
+    for key, info in lookup.items():
+        clat = info.get("lat")
+        clng = info.get("lng")
+        if clat is None or clng is None:
+            continue
+        d = _haversine_km(lat, lng, clat, clng)
+        if d < best_d:
+            best_d = d
+            best_key = key
+            best_info = info
+    if best_key and best_d <= max_km:
+        return best_key, best_info
+    return None
 
 
 def _fuzzy_city_match(text: str, min_score: float = 70.0) -> Optional[dict]:
@@ -209,11 +250,11 @@ def resolve_location(
             resolution_method: "gps" | "text_fuzzy" | "text_llm" | "unassigned",
         }
     """
-    def _from_entry(entry: dict, method: str) -> dict:
-        """Build return dict from a city_lookup entry."""
+    def _from_entry(entry: dict, method: str, city_key: Optional[str] = None) -> dict:
         return {
             "lat": entry.get("lat"),
             "lng": entry.get("lng"),
+            "city": city_key,
             "zone_name": entry.get("zone"),
             "district": entry.get("district"),
             "state": entry.get("state"),
@@ -225,25 +266,32 @@ def resolve_location(
     if raw_lat is not None and raw_lng is not None:
         lat = round(float(raw_lat), 3)
         lng = round(float(raw_lng), 3)
+
+        # 1a. Nearest city in city_lookup (gives the real city name like "Paravur")
+        near = _nearest_city(lat, lng, max_km=40.0)
+        if near:
+            city_key, info = near
+            return {
+                "lat": lat,
+                "lng": lng,
+                "city": city_key,
+                "zone_name": info.get("zone"),
+                "district": info.get("district"),
+                "state": info.get("state"),
+                "country": info.get("country"),
+                "resolution_method": "gps",
+            }
+
+        # 1b. Fallback — polygon lookup (district-level only)
         zone_name, district = _point_in_polygon(lat, lng)
-
-        # Enrich GPS result with state/country from city_lookup if zone matched
-        state = country = None
-        if zone_name:
-            lookup = _load_city_lookup()
-            for entry in lookup.values():
-                if entry.get("zone") == zone_name:
-                    state = entry.get("state")
-                    country = entry.get("country")
-                    break
-
         return {
             "lat": lat,
             "lng": lng,
+            "city": None,
             "zone_name": zone_name,
             "district": district,
-            "state": state,
-            "country": country,
+            "state": None,
+            "country": None,
             "resolution_method": "gps",
         }
 
@@ -263,6 +311,7 @@ def resolve_location(
     return {
         "lat": None,
         "lng": None,
+        "city": None,
         "zone_name": None,
         "district": None,
         "state": None,

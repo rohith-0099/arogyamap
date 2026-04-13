@@ -1,14 +1,13 @@
-"""HuggingFace LLaVA photo symptom analysis."""
+"""Groq vision photo symptom analysis (Llama-4 Scout)."""
 
 import base64
+import logging
 import os
-from typing import Optional
 
-import httpx
+logger = logging.getLogger(__name__)
 
-_HF_API_KEY = os.getenv("HF_API_KEY", "")
-_MODEL = "llava-hf/llava-1.5-7b-hf"
-_API_URL = f"https://api-inference.huggingface.co/models/{_MODEL}"
+_GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+_MODEL = os.getenv("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
 
 _PROMPT = (
     "You are a medical image analyst for a rural health app in India. "
@@ -20,74 +19,45 @@ _PROMPT = (
 )
 
 
-async def analyse_photo(image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
-    """
-    Send image to HuggingFace LLaVA for medical visual analysis.
-    Returns a short description string.
-    """
-    if not _HF_API_KEY:
+def analyse_photo_sync(image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
+    """Send image to Groq vision model and return a short description string."""
+    if not _GROQ_API_KEY:
         return "Photo analysis unavailable (no API key)."
 
     try:
-        b64_image = base64.b64encode(image_bytes).decode("utf-8")
-        data_url = f"data:{mime_type};base64,{b64_image}"
-
-        payload = {
-            "inputs": {
-                "image": data_url,
-                "text": _PROMPT,
-            }
-        }
-
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                _API_URL,
-                json=payload,
-                headers={
-                    "Authorization": f"Bearer {_HF_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-            )
-
-        if resp.status_code == 200:
-            result = resp.json()
-            # HF inference API returns list or dict depending on model
-            if isinstance(result, list) and result:
-                text = result[0].get("generated_text", "")
-            elif isinstance(result, dict):
-                text = result.get("generated_text", "")
-            else:
-                text = str(result)
-
-            # Clean up — remove the prompt echo if present
-            if _PROMPT[:20] in text:
-                text = text.split(_PROMPT)[-1].strip()
-
-            return text[:500] if text else "No visual findings."
-        else:
-            print(f"[photo] HF API error {resp.status_code}: {resp.text[:200]}")
-            return "Photo analysis temporarily unavailable."
-
-    except Exception as e:
-        print(f"[photo] Analysis error: {e}")
-        return "Photo analysis failed."
-
-
-def analyse_photo_sync(image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
-    """Synchronous wrapper for photo analysis."""
-    import asyncio
+        from groq import Groq
+    except ImportError:
+        logger.warning("[photo] groq package not installed")
+        return "Photo analysis unavailable."
 
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(
-                    asyncio.run, analyse_photo(image_bytes, mime_type)
-                )
-                return future.result(timeout=35)
-        else:
-            return loop.run_until_complete(analyse_photo(image_bytes, mime_type))
+        b64 = base64.b64encode(image_bytes).decode("utf-8")
+        data_url = f"data:{mime_type};base64,{b64}"
+
+        client = Groq(api_key=_GROQ_API_KEY)
+        resp = client.chat.completions.create(
+            model=_MODEL,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": _PROMPT},
+                        {"type": "image_url", "image_url": {"url": data_url}},
+                    ],
+                }
+            ],
+            temperature=0.2,
+            max_tokens=180,
+        )
+        text = (resp.choices[0].message.content or "").strip()
+        return text[:500] if text else "No visual findings."
+
     except Exception as e:
-        print(f"[photo] Sync wrapper error: {e}")
+        logger.warning(f"[photo] Groq vision error: {e}")
         return "Photo analysis failed."
+
+
+async def analyse_photo(image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
+    """Async wrapper — Groq SDK is sync, so we run it in a thread."""
+    import asyncio
+    return await asyncio.to_thread(analyse_photo_sync, image_bytes, mime_type)

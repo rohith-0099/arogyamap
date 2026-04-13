@@ -13,6 +13,7 @@ import {
   RefreshCcw,
   Loader2
 } from "lucide-react";
+import MicParticles from "./MicParticles";
 
 const URGENCY_COLORS = {
   high: "#ff2200",
@@ -44,13 +45,12 @@ export default function ReportForm() {
   const chunksRef = useRef([]);
   const fileInputRef = useRef(null);
 
-  // Get GPS on mount
-  useEffect(() => {
-    setLocStatus("loading");
+  function requestLocation() {
     if (!navigator.geolocation) {
       setLocStatus("denied");
       return;
     }
+    setLocStatus("loading");
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         // Round to 500m grid for privacy
@@ -59,9 +59,18 @@ export default function ReportForm() {
         setLocation({ lat, lng });
         setLocStatus("granted");
       },
-      () => setLocStatus("denied"),
-      { timeout: 8000 }
+      (err) => {
+        console.warn("geolocation error:", err);
+        setLocStatus("denied");
+      },
+      { timeout: 10000, enableHighAccuracy: true, maximumAge: 0 }
     );
+  }
+
+  // Auto-ask once on mount
+  useEffect(() => {
+    requestLocation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function startRecording() {
@@ -234,11 +243,22 @@ export default function ReportForm() {
           Your report helps protect your community. All data is anonymous.
         </p>
         {/* Location status */}
-        <div className="mt-2 flex items-center justify-center gap-1.5 text-xs text-gray-500">
+        <div className="mt-2 flex items-center justify-center gap-2 text-xs text-gray-500 flex-wrap">
           <MapPin size={12} />
-          {locStatus === "granted" && "Location captured (privacy-rounded)"}
-          {locStatus === "loading" && "Detecting location…"}
-          {locStatus === "denied" && "Location not available — city will be used"}
+          {locStatus === "granted" && <span>Location captured (privacy-rounded)</span>}
+          {locStatus === "loading" && <span>Detecting location…</span>}
+          {(locStatus === "denied" || locStatus === "idle") && (
+            <>
+              <span className="text-yellow-400">Location not shared</span>
+              <button
+                type="button"
+                onClick={requestLocation}
+                className="ml-1 px-2 py-0.5 rounded-md border border-urgency-high/40 text-urgency-high hover:bg-urgency-high/10 transition-all"
+              >
+                Enable location
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -246,21 +266,24 @@ export default function ReportForm() {
         {/* Mic button */}
         <div className="flex flex-col items-center gap-4">
           {!audioBlob ? (
-            <button
-              type="button"
-              onClick={recording ? stopRecording : startRecording}
-              className={`w-28 h-28 rounded-full flex items-center justify-center transition-all shadow-2xl ${
-                recording
-                  ? "bg-urgency-high mic-recording shadow-red-900/60"
-                  : "bg-dark-700 hover:bg-urgency-high/80 border-2 border-dark-500 hover:border-urgency-high"
-              }`}
-            >
-              {recording ? (
-                <Square size={32} fill="white" />
-              ) : (
-                <Mic size={40} className="text-white" />
-              )}
-            </button>
+            <div className="relative w-[260px] h-[260px] flex items-center justify-center">
+              <MicParticles active={recording} size={260} />
+              <button
+                type="button"
+                onClick={recording ? stopRecording : startRecording}
+                className={`relative z-10 w-28 h-28 rounded-full flex items-center justify-center transition-all shadow-2xl ${
+                  recording
+                    ? "bg-urgency-high shadow-red-900/60"
+                    : "bg-dark-700 hover:bg-urgency-high/80 border-2 border-dark-500 hover:border-urgency-high"
+                }`}
+              >
+                {recording ? (
+                  <Square size={32} fill="white" />
+                ) : (
+                  <Mic size={40} className="text-white" />
+                )}
+              </button>
+            </div>
           ) : (
             <div className="w-full">
               <div className="text-center text-green-400 text-sm mb-2">

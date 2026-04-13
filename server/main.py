@@ -5,6 +5,7 @@ Starts background threads: Telegram bot, email poller, outbreak detector.
 
 import asyncio
 import io
+import json
 import logging
 import os
 import sys
@@ -202,6 +203,9 @@ async def process_report(
         photo_bytes = await photo.read()
         photo_mime = photo.content_type or "image/jpeg"
 
+    # 0. Location resolution (GPS → fuzzy → LLM → unassigned)
+    location = resolve_location(raw_lat=lat, raw_lng=lng, text=text)
+
     # 1. Acoustic analysis
     acoustic = {}
     if audio_bytes:
@@ -255,8 +259,14 @@ async def process_report(
             symptoms_summary=symptoms_summary,
             urgency=urgency,
             advice=advice,
-            lat=lat,
-            lng=lng,
+            lat=location.get("lat", lat),
+            lng=location.get("lng", lng),
+            city=location.get("city") or "",
+            zone_name=location.get("zone_name"),
+            district=location.get("district"),
+            state=location.get("state"),
+            country=location.get("country"),
+            resolution_method=location.get("resolution_method", "unassigned"),
             has_cough=acoustic.get("has_cough", False),
             voice_stress=acoustic.get("voice_stress", 0.0),
             cough_type=acoustic.get("cough_type", "none"),
@@ -398,8 +408,11 @@ async def _process_and_save(
             advice=advice,
             lat=anon_lat,
             lng=anon_lng,
+            city=location.get("city") or "",
             zone_name=location.get("zone_name"),
             district=location.get("district"),
+            state=location.get("state"),
+            country=location.get("country"),
             resolution_method=location["resolution_method"],
             has_cough=acoustic.get("has_cough", False),
             voice_stress=acoustic.get("voice_stress", 0.0),
@@ -622,25 +635,28 @@ async def dashboard_reports(
         raise HTTPException(status_code=400, detail="page must be >= 1")
     page_size = min(max(page_size, 1), 100)
 
-    # If city provided, resolve to zone/district/state/country via city_lookup
+    # If city provided, resolve to district/state/country via city_lookup.
+    # NOTE: we deliberately do NOT inherit `zone` from city_lookup, because the
+    # reports table stores zone_name from the GPS polygon pipeline (district-level
+    # in zones.geojson), while city_lookup has finer sub-zones. Filter by district
+    # instead and narrow further via the `city` column if available.
+    city_raw_name = None
     if city:
-        import json as _json
         from utils.location import CITY_LOOKUP_PATH
         try:
             with open(CITY_LOOKUP_PATH, encoding="utf-8") as f:
-                _lookup = _json.load(f)
+                _lookup = json.load(f)
             city_info = _lookup.get(city.lower())
             if city_info:
-                zone     = zone     or city_info.get("zone")
                 district = district or city_info.get("district")
                 state    = state    or city_info.get("state")
                 country  = country  or city_info.get("country")
+                city_raw_name = city.lower()
         except Exception:
             pass
 
-    # Role-based scope — city/zone/district are user-selected filters, not hard requirements.
-    # Return zone_required flag so frontend shows the location picker instead of crashing.
-    if role == "asha_worker" and not city and not zone and not district:
+    # Role-based scope — asha_worker must at least pick a district (city optional).
+    if role == "asha_worker" and not district and not zone:
         return {
             "reports": [],
             "pagination": {"page": 1, "page_size": page_size, "total": 0, "pages": 1},
@@ -671,21 +687,26 @@ async def dashboard_reports(
 
     # Role scoping
     if role == "asha_worker":
-        query = query.eq("zone_name", zone)
+        if district:
+            query = query.eq("district", district)
+        elif zone:
+            query = query.eq("zone_name", zone)
     elif role == "supervisor":
-        query = query.eq("district", district)
+        if district:
+            query = query.eq("district", district)
     else:
-        # admin: optional filters
         if zone:
             query = query.eq("zone_name", zone)
         if district:
             query = query.eq("district", district)
 
-    # Geographic hierarchy filters (applied after role scope)
+    # Geographic hierarchy filters
     if state:
         query = query.eq("state", state)
     if country:
         query = query.eq("country", country)
+    # Note: we intentionally don't filter by reports.city here — it's often empty
+    # (GPS-resolved reports only populate district/zone_name). District is enough.
 
     # Optional filters
     if urgency:
@@ -713,9 +734,22 @@ async def dashboard_reports(
         .gte("timestamp", since)
     )
     if role == "asha_worker":
-        stats_query = stats_query.eq("zone_name", zone)
+        if district:
+            stats_query = stats_query.eq("district", district)
+        elif zone:
+            stats_query = stats_query.eq("zone_name", zone)
     elif role == "supervisor":
-        stats_query = stats_query.eq("district", district)
+        if district:
+            stats_query = stats_query.eq("district", district)
+    else:
+        if zone:
+            stats_query = stats_query.eq("zone_name", zone)
+        if district:
+            stats_query = stats_query.eq("district", district)
+    if state:
+        stats_query = stats_query.eq("state", state)
+    if country:
+        stats_query = stats_query.eq("country", country)
 
     stats_result = stats_query.execute()
     total_count = stats_result.count or 0
@@ -835,6 +869,17 @@ async def get_hierarchy():
 @app.get("/zones")
 async def get_zones():
     return await get_hierarchy()
+
+
+@app.get("/zones/geojson")
+async def get_zones_geojson():
+    """Serve raw zones.geojson for map polygon overlay."""
+    from utils.location import ZONES_GEOJSON_PATH
+    try:
+        with open(ZONES_GEOJSON_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {"type": "FeatureCollection", "features": []}
 
 
 if __name__ == "__main__":
