@@ -24,6 +24,7 @@ function MapInner({ reports, outbreakClusters }) {
     TileLayer,
     CircleMarker,
     Tooltip,
+    ZoomControl,
     useMap,
   } = require("react-leaflet");
 
@@ -32,7 +33,7 @@ function MapInner({ reports, outbreakClusters }) {
       center={KERALA_CENTER}
       zoom={8}
       style={{ height: "100%", width: "100%" }}
-      zoomControl={true}
+      zoomControl={false}
       attributionControl={true}
     >
       <TileLayer
@@ -41,6 +42,7 @@ function MapInner({ reports, outbreakClusters }) {
         subdomains="abcd"
         maxZoom={20}
       />
+      <ZoomControl position="topright" />
 
       {/* Outbreak cluster rings */}
       {outbreakClusters.map((cluster, i) =>
@@ -196,7 +198,11 @@ export default function MapView() {
       <OutbreakBanner clusters={outbreakClusters} />
 
       {/* Stats overlay */}
-      <div className="absolute top-4 left-4 z-[1000] bg-dark-800/90 backdrop-blur rounded-xl p-3 border border-dark-600 text-sm">
+      <div 
+        className={`absolute left-4 z-[1000] bg-dark-800/90 backdrop-blur rounded-xl p-3 border border-dark-600 text-sm transition-all duration-500 ease-in-out ${
+          outbreakClusters.length > 0 ? "top-20" : "top-4"
+        }`}
+      >
         <div className="text-gray-400 text-xs mb-2 font-medium">LAST 48H</div>
         <div className="flex gap-3">
           <div className="text-center">
