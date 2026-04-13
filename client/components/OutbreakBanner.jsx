@@ -1,4 +1,4 @@
-"use client";
+import { AlertTriangle } from "lucide-react";
 
 export default function OutbreakBanner({ clusters }) {
   if (!clusters || clusters.length === 0) return null;
@@ -6,9 +6,10 @@ export default function OutbreakBanner({ clusters }) {
   return (
     <div className="fixed top-14 left-0 right-0 z-[9998] bg-urgency-high/95 backdrop-blur border-b border-red-700 shadow-lg shadow-red-900/20">
       <div className="max-w-7xl mx-auto px-4 py-2 flex items-center gap-3 overflow-x-auto">
-        <span className="animate-pulse text-white font-bold text-sm whitespace-nowrap">
-          🚨 OUTBREAK ALERT
-        </span>
+        <div className="flex items-center gap-2 animate-pulse text-white font-bold text-sm whitespace-nowrap">
+          <AlertTriangle size={18} fill="currentColor" />
+          <span>OUTBREAK ALERT</span>
+        </div>
         <div className="flex gap-4 text-sm text-red-100">
           {clusters.map((cluster, i) => (
             <span key={i} className="whitespace-nowrap">
