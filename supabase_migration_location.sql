@@ -4,10 +4,14 @@
 ALTER TABLE reports
   ADD COLUMN IF NOT EXISTS zone_name TEXT,
   ADD COLUMN IF NOT EXISTS district TEXT,
+  ADD COLUMN IF NOT EXISTS state TEXT,
+  ADD COLUMN IF NOT EXISTS country TEXT DEFAULT 'India',
   ADD COLUMN IF NOT EXISTS resolution_method TEXT DEFAULT 'unassigned';
 
 CREATE INDEX IF NOT EXISTS idx_reports_zone ON reports (zone_name) WHERE zone_name IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_reports_district ON reports (district) WHERE district IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_reports_state ON reports (state) WHERE state IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_reports_country ON reports (country) WHERE country IS NOT NULL;
 
 COMMENT ON COLUMN reports.zone_name IS 'Resolved service zone (from GPS polygon or fuzzy text match)';
 COMMENT ON COLUMN reports.district IS 'Administrative district for supervisor scoping';

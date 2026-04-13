@@ -575,8 +575,11 @@ _VALID_ORDER = {"asc", "desc"}
 async def dashboard_reports(
     request: Request,
     role: str = "admin",
-    zone: Optional[str] = None,
+    city: Optional[str] = None,       # city key from city_lookup (most granular)
+    zone: Optional[str] = None,       # internal zone code (derived from city if not supplied)
     district: Optional[str] = None,
+    state: Optional[str] = None,
+    country: Optional[str] = None,
     urgency: Optional[str] = None,
     channel: Optional[str] = None,
     outbreak_only: bool = False,
@@ -619,14 +622,31 @@ async def dashboard_reports(
         raise HTTPException(status_code=400, detail="page must be >= 1")
     page_size = min(max(page_size, 1), 100)
 
-    # Role-based scope — zone/district are user-selected filters, not hard requirements.
-    # Return a zone_required flag so the frontend can show the zone picker.
-    if role == "asha_worker" and not zone and not district:
+    # If city provided, resolve to zone/district/state/country via city_lookup
+    if city:
+        import json as _json
+        from utils.location import CITY_LOOKUP_PATH
+        try:
+            with open(CITY_LOOKUP_PATH, encoding="utf-8") as f:
+                _lookup = _json.load(f)
+            city_info = _lookup.get(city.lower())
+            if city_info:
+                zone     = zone     or city_info.get("zone")
+                district = district or city_info.get("district")
+                state    = state    or city_info.get("state")
+                country  = country  or city_info.get("country")
+        except Exception:
+            pass
+
+    # Role-based scope — city/zone/district are user-selected filters, not hard requirements.
+    # Return zone_required flag so frontend shows the location picker instead of crashing.
+    if role == "asha_worker" and not city and not zone and not district:
         return {
             "reports": [],
             "pagination": {"page": 1, "page_size": page_size, "total": 0, "pages": 1},
             "stats": {"total": 0, "by_urgency": {"high": 0, "medium": 0, "low": 0}, "outbreak_count": 0},
-            "filters": {"role": role, "zone": zone, "district": district,
+            "filters": {"role": role, "city": city, "zone": zone, "district": district,
+                        "state": state, "country": country,
                         "urgency": urgency, "channel": channel, "outbreak_only": outbreak_only, "hours": hours},
             "zone_required": True,
         }
@@ -643,7 +663,7 @@ async def dashboard_reports(
         client.table("reports")
         .select(
             "id, timestamp, channel, symptoms_summary, urgency, advice, "
-            "zone_name, district, resolution_method, has_cough, cough_type, "
+            "zone_name, district, state, country, resolution_method, has_cough, cough_type, "
             "voice_stress, outbreak_flag, follow_up_status, language"
         )
         .gte("timestamp", since)
@@ -660,6 +680,12 @@ async def dashboard_reports(
             query = query.eq("zone_name", zone)
         if district:
             query = query.eq("district", district)
+
+    # Geographic hierarchy filters (applied after role scope)
+    if state:
+        query = query.eq("state", state)
+    if country:
+        query = query.eq("country", country)
 
     # Optional filters
     if urgency:
@@ -719,8 +745,11 @@ async def dashboard_reports(
         },
         "filters": {
             "role": role,
+            "city": city,
             "zone": zone,
             "district": district,
+            "state": state,
+            "country": country,
             "urgency": urgency,
             "channel": channel,
             "outbreak_only": outbreak_only,
@@ -729,34 +758,83 @@ async def dashboard_reports(
     }
 
 
-@app.get("/zones")
-async def get_zones():
+@app.get("/hierarchy")
+async def get_hierarchy():
     """
-    Return all available districts and zones from the GeoJSON config.
-    Used by the frontend zone/district picker.
+    Return the full Country → State → District → City hierarchy
+    derived from city_lookup.json (single source of truth).
+
+    City is the granular unit — what an ASHA worker selects to scope their view.
+    Zone is the internal routing code derived from city; not exposed in the UI.
     """
     import json as _json
-    from utils.location import ZONES_GEOJSON_PATH, CITY_LOOKUP_PATH
-
-    districts: dict[str, list[str]] = {}  # district → [zone_name, ...]
+    from utils.location import CITY_LOOKUP_PATH
+    from collections import defaultdict
 
     try:
-        with open(ZONES_GEOJSON_PATH, encoding="utf-8") as f:
-            geojson = _json.load(f)
-        for feat in geojson.get("features", []):
-            props = feat.get("properties", {})
-            d = props.get("district", "Unknown")
-            z = props.get("zone_name", "Unknown")
-            districts.setdefault(d, [])
-            if z not in districts[d]:
-                districts[d].append(z)
+        with open(CITY_LOOKUP_PATH, encoding="utf-8") as f:
+            lookup = _json.load(f)
     except FileNotFoundError:
-        pass
+        return {"countries": [], "states_by_country": {}, "districts_by_state": {}, "cities_by_district": {}, "city_meta": {}}
+
+    countries: set[str] = set()
+    states_by_country: dict[str, set] = defaultdict(set)
+    districts_by_state: dict[str, set] = defaultdict(set)
+    cities_by_district: dict[str, list] = defaultdict(list)
+    # city_meta: canonical city display name → {zone, district, state, country, lat, lng}
+    city_meta: dict[str, dict] = {}
+
+    for key, v in lookup.items():
+        if key.startswith("_"):
+            continue
+        country  = v.get("country",  "Unknown")
+        state    = v.get("state",    "Unknown")
+        district = v.get("district", "Unknown")
+        zone     = v.get("zone",     "Unknown")
+        lat      = v.get("lat")
+        lng      = v.get("lng")
+
+        # Canonical display name = title-case of key
+        display = key.title()
+
+        countries.add(country)
+        states_by_country[country].add(state)
+        districts_by_state[state].add(district)
+
+        # Deduplicate cities by display name within district
+        existing = [c["name"] for c in cities_by_district[district]]
+        if display not in existing:
+            cities_by_district[district].append({
+                "name": display,
+                "key": key,
+                "zone": zone,
+                "lat": lat,
+                "lng": lng,
+            })
+
+        # Index by key for fast lookup
+        city_meta[key] = {
+            "zone": zone,
+            "district": district,
+            "state": state,
+            "country": country,
+            "lat": lat,
+            "lng": lng,
+        }
 
     return {
-        "districts": sorted(districts.keys()),
-        "zones_by_district": {k: sorted(v) for k, v in districts.items()},
+        "countries": sorted(countries),
+        "states_by_country":  {k: sorted(v) for k, v in states_by_country.items()},
+        "districts_by_state": {k: sorted(v) for k, v in districts_by_state.items()},
+        "cities_by_district": {k: sorted(v, key=lambda x: x["name"]) for k, v in cities_by_district.items()},
+        "city_meta": city_meta,
     }
+
+
+# Keep /zones as a backwards-compatible alias
+@app.get("/zones")
+async def get_zones():
+    return await get_hierarchy()
 
 
 if __name__ == "__main__":

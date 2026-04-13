@@ -209,45 +209,55 @@ def resolve_location(
             resolution_method: "gps" | "text_fuzzy" | "text_llm" | "unassigned",
         }
     """
+    def _from_entry(entry: dict, method: str) -> dict:
+        """Build return dict from a city_lookup entry."""
+        return {
+            "lat": entry.get("lat"),
+            "lng": entry.get("lng"),
+            "zone_name": entry.get("zone"),
+            "district": entry.get("district"),
+            "state": entry.get("state"),
+            "country": entry.get("country"),
+            "resolution_method": method,
+        }
+
     # ── Priority 1: GPS ──────────────────────────────────────────────────────
     if raw_lat is not None and raw_lng is not None:
         lat = round(float(raw_lat), 3)
         lng = round(float(raw_lng), 3)
         zone_name, district = _point_in_polygon(lat, lng)
+
+        # Enrich GPS result with state/country from city_lookup if zone matched
+        state = country = None
+        if zone_name:
+            lookup = _load_city_lookup()
+            for entry in lookup.values():
+                if entry.get("zone") == zone_name:
+                    state = entry.get("state")
+                    country = entry.get("country")
+                    break
+
         return {
             "lat": lat,
             "lng": lng,
             "zone_name": zone_name,
             "district": district,
+            "state": state,
+            "country": country,
             "resolution_method": "gps",
         }
 
     # ── Priority 2: Text ─────────────────────────────────────────────────────
     if text:
-        # Try fuzzy match first (fast, no API call)
         city_entry = _fuzzy_city_match(text)
         if city_entry:
-            return {
-                "lat": city_entry.get("lat"),
-                "lng": city_entry.get("lng"),
-                "zone_name": city_entry.get("zone"),
-                "district": city_entry.get("district"),
-                "resolution_method": "text_fuzzy",
-            }
+            return _from_entry(city_entry, "text_fuzzy")
 
-        # LLM fallback only if fuzzy failed
         llm_city = _llm_extract_location(text)
         if llm_city:
-            # Try to match LLM result against lookup
             city_entry = _fuzzy_city_match(llm_city, min_score=60.0)
             if city_entry:
-                return {
-                    "lat": city_entry.get("lat"),
-                    "lng": city_entry.get("lng"),
-                    "zone_name": city_entry.get("zone"),
-                    "district": city_entry.get("district"),
-                    "resolution_method": "text_llm",
-                }
+                return _from_entry(city_entry, "text_llm")
 
     # ── Priority 3: Unassigned ───────────────────────────────────────────────
     return {
@@ -255,6 +265,8 @@ def resolve_location(
         "lng": None,
         "zone_name": None,
         "district": None,
+        "state": None,
+        "country": None,
         "resolution_method": "unassigned",
     }
 
