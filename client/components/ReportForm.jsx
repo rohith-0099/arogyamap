@@ -1,6 +1,18 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { 
+  AlertCircle, 
+  AlertTriangle, 
+  CheckCircle, 
+  Mic, 
+  Square, 
+  Camera, 
+  MapPin, 
+  ShieldCheck, 
+  RefreshCcw,
+  Loader2
+} from "lucide-react";
 
 const URGENCY_COLORS = {
   high: "#ff2200",
@@ -9,9 +21,9 @@ const URGENCY_COLORS = {
 };
 
 const URGENCY_LABELS = {
-  high: "🚨 Go to Emergency Now",
-  medium: "⚠️ See Doctor This Week",
-  low: "✅ Rest at Home",
+  high: "Go to Emergency Now",
+  medium: "See Doctor This Week",
+  low: "Rest at Home",
 };
 
 export default function ReportForm() {
@@ -147,6 +159,9 @@ export default function ReportForm() {
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-white font-bold text-lg mb-4"
             style={{ backgroundColor: color + "25", border: `1px solid ${color}` }}
           >
+            {result.urgency === "high" && <AlertCircle className="text-urgency-high" />}
+            {result.urgency === "medium" && <AlertTriangle className="text-urgency-medium" />}
+            {result.urgency === "low" && <CheckCircle className="text-urgency-low" />}
             {URGENCY_LABELS[result.urgency] || result.urgency}
           </div>
 
@@ -187,8 +202,9 @@ export default function ReportForm() {
             <div className="mb-4">
               <div className="text-gray-400 text-xs mb-2">NEAREST CLINICS</div>
               {result.clinics.map((clinic, i) => (
-                <div key={i} className="text-sm text-gray-300 mb-1">
-                  📍 {clinic.name} — {clinic.distance_km?.toFixed(1)} km
+                <div key={i} className="flex items-center gap-1.5 text-sm text-gray-300 mb-1">
+                  <MapPin size={14} className="text-gray-500" />
+                  {clinic.name} — {clinic.distance_km?.toFixed(1)} km
                 </div>
               ))}
             </div>
@@ -218,10 +234,11 @@ export default function ReportForm() {
           Your report helps protect your community. All data is anonymous.
         </p>
         {/* Location status */}
-        <div className="mt-2 text-xs text-gray-500">
-          {locStatus === "granted" && "📍 Location captured (privacy-rounded)"}
-          {locStatus === "loading" && "📍 Detecting location…"}
-          {locStatus === "denied" && "📍 Location not available — city will be used"}
+        <div className="mt-2 flex items-center justify-center gap-1.5 text-xs text-gray-500">
+          <MapPin size={12} />
+          {locStatus === "granted" && "Location captured (privacy-rounded)"}
+          {locStatus === "loading" && "Detecting location…"}
+          {locStatus === "denied" && "Location not available — city will be used"}
         </div>
       </div>
 
@@ -232,13 +249,17 @@ export default function ReportForm() {
             <button
               type="button"
               onClick={recording ? stopRecording : startRecording}
-              className={`w-28 h-28 rounded-full text-4xl font-bold transition-all shadow-2xl ${
+              className={`w-28 h-28 rounded-full flex items-center justify-center transition-all shadow-2xl ${
                 recording
                   ? "bg-urgency-high mic-recording shadow-red-900/60"
                   : "bg-dark-700 hover:bg-urgency-high/80 border-2 border-dark-500 hover:border-urgency-high"
               }`}
             >
-              {recording ? "⏹" : "🎙️"}
+              {recording ? (
+                <Square size={32} fill="white" />
+              ) : (
+                <Mic size={40} className="text-white" />
+              )}
             </button>
           ) : (
             <div className="w-full">
@@ -311,9 +332,10 @@ export default function ReportForm() {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="w-full h-24 border-2 border-dashed border-dark-600 rounded-xl text-gray-500 hover:border-gray-500 hover:text-gray-400 transition-all text-sm"
+              className="w-full h-24 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-dark-600 rounded-xl text-gray-500 hover:border-gray-500 hover:text-gray-400 transition-all text-sm"
             >
-              📷 Tap to add photo
+              <Camera size={24} />
+              Tap to add photo
             </button>
           )}
           <input
