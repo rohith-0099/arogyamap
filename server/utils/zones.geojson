@@ -1,0 +1,90 @@
+{
+  "type": "FeatureCollection",
+  "metadata": {
+    "region": "Kerala, India",
+    "description": "Configurable zone/district boundaries. Replace with your region's GeoJSON. Each feature needs zone_name and district properties.",
+    "coordinate_system": "WGS84"
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "zone_name": "TVM North", "district": "Thiruvananthapuram", "assigned_worker_id": null },
+      "geometry": { "type": "Polygon", "coordinates": [[[76.70, 8.55], [77.20, 8.55], [77.20, 8.80], [76.70, 8.80], [76.70, 8.55]]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone_name": "TVM South", "district": "Thiruvananthapuram", "assigned_worker_id": null },
+      "geometry": { "type": "Polygon", "coordinates": [[[76.70, 8.30], [77.20, 8.30], [77.20, 8.55], [76.70, 8.55], [76.70, 8.30]]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone_name": "Kollam Central", "district": "Kollam", "assigned_worker_id": null },
+      "geometry": { "type": "Polygon", "coordinates": [[[76.50, 8.80], [77.00, 8.80], [77.00, 9.30], [76.50, 9.30], [76.50, 8.80]]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone_name": "Alappuzha Zone", "district": "Alappuzha", "assigned_worker_id": null },
+      "geometry": { "type": "Polygon", "coordinates": [[[76.20, 9.30], [76.70, 9.30], [76.70, 9.80], [76.20, 9.80], [76.20, 9.30]]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone_name": "Pathanamthitta Zone", "district": "Pathanamthitta", "assigned_worker_id": null },
+      "geometry": { "type": "Polygon", "coordinates": [[[76.70, 9.20], [77.20, 9.20], [77.20, 9.80], [76.70, 9.80], [76.70, 9.20]]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone_name": "Kottayam Central", "district": "Kottayam", "assigned_worker_id": null },
+      "geometry": { "type": "Polygon", "coordinates": [[[76.40, 9.50], [77.00, 9.50], [77.00, 10.00], [76.40, 10.00], [76.40, 9.50]]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone_name": "Idukki Zone", "district": "Idukki", "assigned_worker_id": null },
+      "geometry": { "type": "Polygon", "coordinates": [[[76.80, 9.80], [77.40, 9.80], [77.40, 10.40], [76.80, 10.40], [76.80, 9.80]]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone_name": "Ernakulam North", "district": "Ernakulam", "assigned_worker_id": null },
+      "geometry": { "type": "Polygon", "coordinates": [[[76.10, 10.00], [76.80, 10.00], [76.80, 10.20], [76.10, 10.20], [76.10, 10.00]]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone_name": "Ernakulam South", "district": "Ernakulam", "assigned_worker_id": null },
+      "geometry": { "type": "Polygon", "coordinates": [[[76.10, 9.80], [76.80, 9.80], [76.80, 10.00], [76.10, 10.00], [76.10, 9.80]]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone_name": "Thrissur Central", "district": "Thrissur", "assigned_worker_id": null },
+      "geometry": { "type": "Polygon", "coordinates": [[[75.90, 10.20], [76.70, 10.20], [76.70, 10.80], [75.90, 10.80], [75.90, 10.20]]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone_name": "Palakkad Zone", "district": "Palakkad", "assigned_worker_id": null },
+      "geometry": { "type": "Polygon", "coordinates": [[[76.30, 10.40], [77.00, 10.40], [77.00, 11.00], [76.30, 11.00], [76.30, 10.40]]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone_name": "Malappuram Zone", "district": "Malappuram", "assigned_worker_id": null },
+      "geometry": { "type": "Polygon", "coordinates": [[[75.90, 11.00], [76.60, 11.00], [76.60, 11.50], [75.90, 11.50], [75.90, 11.00]]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone_name": "Kozhikode Central", "district": "Kozhikode", "assigned_worker_id": null },
+      "geometry": { "type": "Polygon", "coordinates": [[[75.60, 11.10], [76.20, 11.10], [76.20, 11.70], [75.60, 11.70], [75.60, 11.10]]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone_name": "Wayanad Zone", "district": "Wayanad", "assigned_worker_id": null },
+      "geometry": { "type": "Polygon", "coordinates": [[[75.70, 11.40], [76.40, 11.40], [76.40, 11.90], [75.70, 11.90], [75.70, 11.40]]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone_name": "Kannur Central", "district": "Kannur", "assigned_worker_id": null },
+      "geometry": { "type": "Polygon", "coordinates": [[[75.20, 11.70], [76.00, 11.70], [76.00, 12.30], [75.20, 12.30], [75.20, 11.70]]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone_name": "Kasaragod Zone", "district": "Kasaragod", "assigned_worker_id": null },
+      "geometry": { "type": "Polygon", "coordinates": [[[74.90, 12.30], [75.70, 12.30], [75.70, 12.90], [74.90, 12.90], [74.90, 12.30]]] }
+    }
+  ]
+}
