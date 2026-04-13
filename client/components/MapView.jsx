@@ -6,11 +6,11 @@ import OutbreakBanner from "./OutbreakBanner";
 import { supabase } from "@/lib/supabase";
 import { AlertCircle, Radio } from "lucide-react";
 
-// Urgency → color mapping
+// Urgency → neon color mapping
 const URGENCY_COLORS = {
-  high: "#ff2200",
-  medium: "#ff8800",
-  low: "#00cc66",
+  high: "#ff0044",   // Fluorescent Red
+  medium: "#ffaa00", // Bright Neon Orange
+  low: "#00ff88",    // Fluorescent Green
 };
 
 const KERALA_CENTER = [10.8505, 76.2711];
@@ -51,13 +51,13 @@ function MapInner({ reports, outbreakClusters }) {
           <CircleMarker
             key={`outbreak-${i}`}
             center={[cluster.lat, cluster.lng]}
-            radius={30}
+            radius={35}
             pathOptions={{
-              color: "#ff2200",
-              fillColor: "#ff2200",
-              fillOpacity: 0.08,
+              color: "#ff0044",
+              fillColor: "#ff0044",
+              fillOpacity: 0.05,
               weight: 2,
-              dashArray: "6 4",
+              dashArray: "8 6",
             }}
           />
         ) : null
@@ -69,32 +69,43 @@ function MapInner({ reports, outbreakClusters }) {
         const color = URGENCY_COLORS[report.urgency] || "#00cc66";
         return (
           <g key={report.id}>
-            {/* Outer glow */}
+            {/* Outer Large Glow */}
             <CircleMarker
               center={[report.lat, report.lng]}
-              radius={12}
+              radius={20}
               pathOptions={{
                 color: "transparent",
                 fillColor: color,
-                fillOpacity: 0.15,
+                fillOpacity: 0.1,
                 weight: 0,
               }}
             />
-            {/* Inner dot */}
+            {/* Mid Glow */}
             <CircleMarker
               center={[report.lat, report.lng]}
-              radius={5}
+              radius={10}
               pathOptions={{
-                color: color,
+                color: "transparent",
                 fillColor: color,
-                fillOpacity: 0.9,
+                fillOpacity: 0.2,
+                weight: 0,
+              }}
+            />
+            {/* Core Dot (Hot Center) */}
+            <CircleMarker
+              center={[report.lat, report.lng]}
+              radius={4}
+              pathOptions={{
+                color: "#ffffff",
+                fillColor: color,
+                fillOpacity: 1,
                 weight: 1.5,
               }}
             >
               <Tooltip direction="top" offset={[0, -6]} opacity={0.95}>
                 <div className="text-xs">
-                  <div className="font-semibold capitalize">{report.symptoms_summary}</div>
-                  <div className="text-gray-300">
+                  <div className="font-semibold capitalize text-white">{report.symptoms_summary}</div>
+                  <div className="text-gray-300 mt-0.5">
                     Urgency:{" "}
                     <span
                       style={{ color }}
@@ -103,9 +114,8 @@ function MapInner({ reports, outbreakClusters }) {
                       {report.urgency}
                     </span>
                   </div>
-                  <div className="text-gray-400">
-                    via {report.channel} •{" "}
-                    {new Date(report.timestamp).toLocaleTimeString()}
+                  <div className="text-gray-400 text-[10px] mt-1 border-t border-gray-700 pt-1">
+                    via {report.channel} • {new Date(report.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 </div>
               </Tooltip>
