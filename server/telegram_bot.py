@@ -35,6 +35,17 @@ from utils.location import resolve_location
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Global persistent keyboard
+MAIN_MENU = ReplyKeyboardMarkup(
+    [
+        [KeyboardButton("📍 Share My Location", request_location=True)],
+        [KeyboardButton("🗺️ View Disease Map")],
+    ],
+    resize_keyboard=True,
+    is_persistent=True,
+    input_field_placeholder="Share location or send a voice note..."
+)
+
 TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://arogyamap.vercel.app")
 
@@ -94,14 +105,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/help — Show this message\n\n"
         "_All reports are anonymous. No personal data stored._"
     )
-    keyboard = ReplyKeyboardMarkup(
-        [
-            [KeyboardButton("📍 Share My Location", request_location=True)],
-            [KeyboardButton("🗺️ View Disease Map")],
-        ],
-        resize_keyboard=True,
-    )
-    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=keyboard)
+    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=MAIN_MENU)
 
 
 async def cmd_map(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -253,7 +257,7 @@ async def _process_and_reply(
     if not location.get("district"):
         reply_text += "\n\n⚠️ *Tip:* I couldn't detect your location. Tap '📍 Share My Location' below to help us map your community and find the nearest clinics."
     
-    await update.message.reply_text(reply_text, parse_mode="Markdown")
+    await update.message.reply_text(reply_text, parse_mode="Markdown", reply_markup=MAIN_MENU)
 
     # Send nearest clinic location pin
     if clinics and lat:

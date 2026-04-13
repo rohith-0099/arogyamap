@@ -46,6 +46,10 @@ export default function ReportForm() {
   const fileInputRef = useRef(null);
 
   function requestLocation() {
+    if (typeof window !== "undefined" && !window.isSecureContext && window.location.hostname !== "localhost") {
+      setLocStatus("insecure");
+      return;
+    }
     if (!navigator.geolocation) {
       setLocStatus("denied");
       return;
@@ -241,21 +245,50 @@ export default function ReportForm() {
           Your report helps protect your community. All data is anonymous.
         </p>
         {/* Location status */}
-        <div className="mt-2 flex items-center justify-center gap-2 text-xs text-gray-500 flex-wrap">
-          <MapPin size={12} />
-          {locStatus === "granted" && <span>Location captured (privacy-rounded)</span>}
-          {locStatus === "loading" && <span>Detecting location…</span>}
-          {(locStatus === "denied" || locStatus === "idle") && (
-            <>
-              <span className="text-yellow-400">Location not shared</span>
-              <button
-                type="button"
-                onClick={requestLocation}
-                className="ml-1 px-2 py-0.5 rounded-md border border-urgency-high/40 text-urgency-high hover:bg-urgency-high/10 transition-all"
-              >
-                Enable location
+        <div className="mt-4 flex flex-col items-center">
+          {locStatus === "granted" ? (
+            <div className="flex items-center gap-2 px-4 py-2 bg-green-500/10 border border-green-500/30 rounded-full text-xs text-green-400">
+              <ShieldCheck size={14} />
+              <span>Exact Location Captured ✅</span>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={requestLocation}
+              className={`flex items-center gap-2 px-6 py-3 rounded-full font-bold text-sm transition-all shadow-lg animate-pulse
+                ${locStatus === "loading" 
+                  ? "bg-dark-700 text-gray-400 animate-pulse cursor-wait" 
+                  : "bg-urgency-high hover:bg-red-700 text-white shadow-red-900/40"}`}
+            >
+              {locStatus === "loading" ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  Detecting location...
+                </>
+              ) : (
+                <>
+                  <MapPin size={18} />
+                  📍 SHARE MY LOCATION
+                </>
+              )}
+            </button>
+          )}
+          {locStatus === "denied" && (
+            <div className="mt-2 text-center">
+              <p className="text-[10px] text-red-400 max-w-[200px] mx-auto">
+                Permission denied. Please tap the "Lock" icon in your browser address bar to reset permissions.
+              </p>
+              <button onClick={requestLocation} className="mt-1 text-[10px] text-gray-500 hover:underline">
+                Try again
               </button>
-            </>
+            </div>
+          )}
+          {locStatus === "insecure" && (
+            <div className="mt-2 text-center">
+              <p className="text-[10px] text-orange-400 max-w-[200px] mx-auto">
+                ⚠️ GPS Requires HTTPS. Use localhost or a secure connection to enable tracking.
+              </p>
+            </div>
           )}
         </div>
       </div>
