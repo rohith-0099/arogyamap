@@ -1,60 +1,83 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import {
+  Globe, Send, Mail, AlertTriangle, Search, RefreshCw,
+  ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
+  X, MapPin, Activity, Clock, Mic, User, Shield,
+} from "lucide-react";
 
-const URGENCY_COLOR = {
-  high: "#ef4444",
-  medium: "#f59e0b",
-  low: "#22c55e",
-};
-
-const URGENCY_LABEL = {
-  high: "HIGH",
-  medium: "MED",
-  low: "LOW",
+const URGENCY = {
+  high:   { label: "HIGH",   bg: "bg-red-500/15",    text: "text-red-400",    border: "border-red-500/30"    },
+  medium: { label: "MED",    bg: "bg-orange-500/15", text: "text-orange-400", border: "border-orange-500/30" },
+  low:    { label: "LOW",    bg: "bg-green-500/15",  text: "text-green-400",  border: "border-green-500/30"  },
 };
 
 const CHANNEL_ICON = {
-  web: "🌐",
-  telegram: "✈",
-  email: "✉",
+  web:      <Globe size={14} className="text-blue-400" />,
+  telegram: <Send  size={14} className="text-sky-400" />,
+  email:    <Mail  size={14} className="text-purple-400" />,
 };
 
-const RESOLUTION_LABEL = {
-  gps: "GPS",
-  text_fuzzy: "Fuzzy",
-  text_llm: "LLM",
-  unassigned: "—",
+const RESOLUTION = {
+  gps:        { label: "GPS",   cls: "text-green-400" },
+  text_fuzzy: { label: "Fuzzy", cls: "text-yellow-400" },
+  text_llm:   { label: "LLM",   cls: "text-purple-400" },
+  unassigned: { label: "—",     cls: "text-gray-600" },
 };
 
 const PAGE_SIZE = 25;
+const PYTHON_API = process.env.NEXT_PUBLIC_PYTHON_API_URL || "http://localhost:8000";
 
-export default function PatientList({ role = "admin", zone = null, district = null }) {
+export default function PatientList({ role = "admin", zone: propZone = null, district: propDistrict = null }) {
+  // Zone picker state
+  const [allDistricts, setAllDistricts] = useState([]);
+  const [zonesByDistrict, setZonesByDistrict] = useState({});
+  const [selectedDistrict, setSelectedDistrict] = useState(propDistrict || "");
+  const [selectedZone, setSelectedZone] = useState(propZone || "");
+  const [zonesReady, setZonesReady] = useState(false);
+
+  // Report data
   const [reports, setReports] = useState([]);
   const [stats, setStats] = useState({ total: 0, by_urgency: {}, outbreak_count: 0 });
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [zoneRequired, setZoneRequired] = useState(false);
 
   // Filters
   const [filterUrgency, setFilterUrgency] = useState("");
   const [filterChannel, setFilterChannel] = useState("");
   const [filterOutbreak, setFilterOutbreak] = useState(false);
   const [filterHours, setFilterHours] = useState(48);
-  const [filterDistrict, setFilterDistrict] = useState(district || "");
   const [search, setSearch] = useState("");
 
-  // Sorting
+  // Sort
   const [sortBy, setSortBy] = useState("timestamp");
   const [sortOrder, setSortOrder] = useState("desc");
 
   // Page
   const [page, setPage] = useState(1);
 
-  // Detail drawer
-  const [drawerReport, setDrawerReport] = useState(null);
+  // Drawer
+  const [drawer, setDrawer] = useState(null);
+
+  // Load zones from backend
+  useEffect(() => {
+    fetch(`${PYTHON_API}/zones`)
+      .then(r => r.json())
+      .then(d => {
+        setAllDistricts(d.districts || []);
+        setZonesByDistrict(d.zones_by_district || {});
+        setZonesReady(true);
+      })
+      .catch(() => setZonesReady(true));
+  }, []);
 
   const fetchReports = useCallback(async () => {
+    const effectiveZone = selectedZone || propZone;
+    const effectiveDistrict = selectedDistrict || propDistrict;
+
     setLoading(true);
     setError(null);
     try {
@@ -66,17 +89,17 @@ export default function PatientList({ role = "admin", zone = null, district = nu
         sort_by: sortBy,
         order: sortOrder,
       });
-      if (zone) params.set("zone", zone);
-      const effectiveDistrict = role === "admin" ? filterDistrict : district;
+      if (effectiveZone) params.set("zone", effectiveZone);
       if (effectiveDistrict) params.set("district", effectiveDistrict);
       if (filterUrgency) params.set("urgency", filterUrgency);
       if (filterChannel) params.set("channel", filterChannel);
       if (filterOutbreak) params.set("outbreak_only", "true");
 
-      const PYTHON_API = process.env.NEXT_PUBLIC_PYTHON_API_URL || "http://localhost:8000";
       const res = await fetch(`${PYTHON_API}/dashboard/reports?${params}`);
       if (!res.ok) throw new Error(`Server error: ${res.status}`);
       const data = await res.json();
+
+      setZoneRequired(!!data.zone_required);
       setReports(data.reports || []);
       setStats(data.stats || { total: 0, by_urgency: {}, outbreak_count: 0 });
       setPagination(data.pagination || { page: 1, pages: 1, total: 0 });
@@ -85,438 +108,421 @@ export default function PatientList({ role = "admin", zone = null, district = nu
     } finally {
       setLoading(false);
     }
-  }, [role, zone, district, filterUrgency, filterChannel, filterOutbreak, filterHours, page, sortBy, sortOrder]);
+  }, [role, propZone, propDistrict, selectedZone, selectedDistrict, filterUrgency, filterChannel, filterOutbreak, filterHours, page, sortBy, sortOrder]);
 
   useEffect(() => {
     fetchReports();
   }, [fetchReports]);
 
-  // Reset page when filters change
-  useEffect(() => {
-    setPage(1);
-  }, [filterUrgency, filterChannel, filterOutbreak, filterHours, filterDistrict, search, sortBy, sortOrder]);
+  useEffect(() => { setPage(1); }, [filterUrgency, filterChannel, filterOutbreak, filterHours, selectedZone, selectedDistrict, search, sortBy, sortOrder]);
 
   function toggleSort(col) {
-    if (sortBy === col) {
-      setSortOrder(o => (o === "desc" ? "asc" : "desc"));
-    } else {
-      setSortBy(col);
-      setSortOrder("desc");
-    }
+    if (sortBy === col) setSortOrder(o => o === "desc" ? "asc" : "desc");
+    else { setSortBy(col); setSortOrder("desc"); }
   }
 
-  function SortIndicator({ col }) {
-    if (sortBy !== col) return <span style={{ opacity: 0.3 }}>⇅</span>;
-    return <span>{sortOrder === "desc" ? "↓" : "↑"}</span>;
-  }
+  const pending = reports.filter(r => !r.follow_up_status || r.follow_up_status === "pending").length;
+  const u = stats.by_urgency || {};
 
-  const urgencyCounts = stats.by_urgency || {};
-  // Client-side search filter on symptoms
   const displayed = search.trim()
     ? reports.filter(r => r.symptoms_summary?.toLowerCase().includes(search.toLowerCase()))
     : reports;
 
+  const availableZones = selectedDistrict ? (zonesByDistrict[selectedDistrict] || []) : Object.values(zonesByDistrict).flat();
+
+  // ── Zone picker (shown when asha_worker hasn't selected zone yet) ──────────
+  if (role === "asha_worker" && zoneRequired && zonesReady) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        <div className="bg-dark-800 rounded-xl border border-dark-600 p-8 max-w-md mx-auto text-center">
+          <div className="w-12 h-12 rounded-full bg-urgency-high/15 border border-urgency-high/30 flex items-center justify-center mx-auto mb-4">
+            <MapPin size={22} className="text-urgency-high" />
+          </div>
+          <h3 className="text-white font-semibold text-lg mb-1">Select Your Zone</h3>
+          <p className="text-gray-400 text-sm mb-6">Choose your district and zone to see your assigned reports.</p>
+
+          <div className="space-y-3 text-left">
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1.5 block">District</label>
+              <select
+                value={selectedDistrict}
+                onChange={e => { setSelectedDistrict(e.target.value); setSelectedZone(""); }}
+                className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-urgency-high/40"
+              >
+                <option value="">All districts</option>
+                {allDistricts.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1.5 block">Zone</label>
+              <select
+                value={selectedZone}
+                onChange={e => setSelectedZone(e.target.value)}
+                className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-urgency-high/40"
+              >
+                <option value="">All zones</option>
+                {availableZones.map(z => <option key={z} value={z}>{z}</option>)}
+              </select>
+            </div>
+            <button
+              onClick={fetchReports}
+              disabled={!selectedDistrict && !selectedZone}
+              className="w-full bg-urgency-high hover:bg-red-700 disabled:bg-dark-600 disabled:text-gray-600 text-white font-semibold py-2.5 rounded-lg transition-all mt-2"
+            >
+              Load Reports
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ background: "#0d0d1a", color: "#e0e0e0", minHeight: "100vh", fontFamily: "monospace" }}>
+    <div className="max-w-6xl mx-auto px-4 pb-10">
+
       {/* Stats row */}
-      <div style={{ display: "flex", gap: 16, padding: "16px 20px", borderBottom: "1px solid #1e1e3a", flexWrap: "wrap" }}>
-        <StatCard label="Total Reports" value={stats.total} color="#6366f1" />
-        <StatCard label="Critical" value={urgencyCounts.high || 0} color="#ef4444" />
-        <StatCard label="Medium" value={urgencyCounts.medium || 0} color="#f59e0b" />
-        <StatCard label="Low" value={urgencyCounts.low || 0} color="#22c55e" />
-        <StatCard label="Pending Follow-up" value={reports.filter(r => !r.follow_up_status || r.follow_up_status === "pending").length} color="#a855f7" />
-        <StatCard label="Outbreak Flags" value={stats.outbreak_count || 0} color="#f97316" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
+        <StatCard icon={<Activity size={16} />} label="Total Reports"     value={stats.total}              color="text-indigo-400"  border="border-indigo-500/20" />
+        <StatCard icon={<AlertTriangle size={16} />} label="Critical"      value={u.high || 0}              color="text-red-400"     border="border-red-500/20" />
+        <StatCard icon={<Activity size={16} />} label="Medium"             value={u.medium || 0}            color="text-orange-400"  border="border-orange-500/20" />
+        <StatCard icon={<Activity size={16} />} label="Low"                value={u.low || 0}               color="text-green-400"   border="border-green-500/20" />
+        <StatCard icon={<Clock size={16} />}    label="Pending Follow-up"  value={pending}                  color="text-purple-400"  border="border-purple-500/20" />
+        <StatCard icon={<AlertTriangle size={16} />} label="Outbreak Flags" value={stats.outbreak_count||0} color="text-orange-400"  border="border-orange-500/20" />
       </div>
 
-      {/* Filter bar */}
-      <div style={{ display: "flex", gap: 10, padding: "12px 20px", flexWrap: "wrap", alignItems: "center", borderBottom: "1px solid #1e1e3a" }}>
-        {/* Search */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 12, color: "#666" }}>Search:</span>
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="symptoms…"
-            style={{
-              background: "#111128",
-              color: "#ccc",
-              border: "1px solid #2a2a4a",
-              borderRadius: 4,
-              padding: "4px 8px",
-              fontSize: 13,
-              width: 130,
-            }}
-          />
-        </div>
+      {/* Filters card */}
+      <div className="bg-dark-800 rounded-xl border border-dark-600 p-4 mb-4">
+        <div className="flex flex-wrap gap-3 items-center">
 
-        {/* District filter — admin only */}
-        {role === "admin" && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 12, color: "#666" }}>District:</span>
+          {/* Search */}
+          <div className="relative flex-1 min-w-[160px]">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
             <input
               type="text"
-              value={filterDistrict}
-              onChange={e => setFilterDistrict(e.target.value)}
-              placeholder="any district"
-              style={{
-                background: "#111128",
-                color: "#ccc",
-                border: "1px solid #2a2a4a",
-                borderRadius: 4,
-                padding: "4px 8px",
-                fontSize: 13,
-                width: 130,
-              }}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search symptoms…"
+              className="w-full bg-dark-700 border border-dark-600 rounded-lg pl-8 pr-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-urgency-high/30"
             />
           </div>
-        )}
 
-        <Select
-          label="Urgency"
-          value={filterUrgency}
-          onChange={setFilterUrgency}
-          options={[{ value: "", label: "All" }, { value: "high", label: "High" }, { value: "medium", label: "Medium" }, { value: "low", label: "Low" }]}
-        />
-        <Select
-          label="Channel"
-          value={filterChannel}
-          onChange={setFilterChannel}
-          options={[{ value: "", label: "All" }, { value: "web", label: "Web" }, { value: "telegram", label: "Telegram" }, { value: "email", label: "Email" }]}
-        />
-        <Select
-          label="Window"
-          value={filterHours}
-          onChange={v => setFilterHours(Number(v))}
-          options={[{ value: 6, label: "6h" }, { value: 24, label: "24h" }, { value: 48, label: "48h" }, { value: 168, label: "7d" }]}
-        />
-        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={filterOutbreak}
-            onChange={e => setFilterOutbreak(e.target.checked)}
-            style={{ accentColor: "#f97316" }}
+          {/* District — admin + supervisor can change, asha_worker sees their district */}
+          {role !== "asha_worker" && (
+            <FilterSelect
+              label="District"
+              value={selectedDistrict}
+              onChange={v => { setSelectedDistrict(v); setSelectedZone(""); }}
+              options={[{ value: "", label: "All districts" }, ...allDistricts.map(d => ({ value: d, label: d }))]}
+            />
+          )}
+
+          {/* Zone */}
+          <FilterSelect
+            label="Zone"
+            value={selectedZone}
+            onChange={setSelectedZone}
+            options={[{ value: "", label: "All zones" }, ...availableZones.map(z => ({ value: z, label: z }))]}
           />
-          Outbreak only
-        </label>
-        <button
-          onClick={fetchReports}
-          style={{ marginLeft: "auto", padding: "6px 14px", background: "#6366f1", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
-        >
-          Refresh
-        </button>
+
+          <FilterSelect
+            label="Urgency"
+            value={filterUrgency}
+            onChange={setFilterUrgency}
+            options={[{ value: "", label: "All urgency" }, { value: "high", label: "High" }, { value: "medium", label: "Medium" }, { value: "low", label: "Low" }]}
+          />
+
+          <FilterSelect
+            label="Channel"
+            value={filterChannel}
+            onChange={setFilterChannel}
+            options={[{ value: "", label: "All channels" }, { value: "web", label: "Web" }, { value: "telegram", label: "Telegram" }, { value: "email", label: "Email" }]}
+          />
+
+          <FilterSelect
+            label="Window"
+            value={filterHours}
+            onChange={v => setFilterHours(Number(v))}
+            options={[{ value: 6, label: "6h" }, { value: 24, label: "24h" }, { value: 48, label: "48h" }, { value: 168, label: "7 days" }]}
+          />
+
+          <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer select-none whitespace-nowrap">
+            <input type="checkbox" checked={filterOutbreak} onChange={e => setFilterOutbreak(e.target.checked)} className="accent-orange-500 w-3.5 h-3.5" />
+            Outbreak only
+          </label>
+
+          <button
+            onClick={fetchReports}
+            className="ml-auto flex items-center gap-1.5 px-4 py-2 bg-dark-700 hover:bg-dark-600 border border-dark-600 text-gray-300 hover:text-white text-sm rounded-lg transition-all"
+          >
+            <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Error */}
       {error && (
-        <div style={{ background: "#3b0a0a", color: "#ef4444", padding: "10px 20px", fontSize: 13 }}>
+        <div className="flex items-center gap-2 p-3 mb-4 bg-red-950/50 border border-red-500/30 rounded-lg text-red-400 text-sm">
+          <AlertTriangle size={15} />
           {error}
         </div>
       )}
 
       {/* Table */}
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-          <thead>
-            <tr style={{ background: "#111128", textAlign: "left", color: "#8888aa" }}>
-              <Th onClick={() => toggleSort("timestamp")}>Time <SortIndicator col="timestamp" /></Th>
-              <Th>ID</Th>
-              <Th onClick={() => toggleSort("urgency")}>Urgency <SortIndicator col="urgency" /></Th>
-              <Th>Symptoms</Th>
-              <Th>Zone</Th>
-              {role === "admin" && <Th>District</Th>}
-              <Th>Ch</Th>
-              <Th>Loc</Th>
-              {role !== "asha_worker" && <Th>Worker</Th>}
-              <Th>Status</Th>
-              <Th>OB</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr>
-                <td colSpan={role === "admin" ? 11 : 9} style={{ textAlign: "center", padding: 30, color: "#555" }}>
-                  Loading…
-                </td>
+      <div className="bg-dark-800 rounded-xl border border-dark-600 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-dark-600 text-gray-500 text-xs uppercase tracking-wide">
+                <SortTh col="timestamp" active={sortBy} order={sortOrder} onSort={toggleSort}>Time</SortTh>
+                <Th>ID</Th>
+                <SortTh col="urgency" active={sortBy} order={sortOrder} onSort={toggleSort}>Urgency</SortTh>
+                <Th>Symptoms</Th>
+                <Th>Zone</Th>
+                {role === "admin" && <Th>District</Th>}
+                <Th>Ch</Th>
+                <Th>Loc</Th>
+                {role !== "asha_worker" && <Th>Worker</Th>}
+                <Th>Status</Th>
+                <Th>OB</Th>
               </tr>
-            )}
-            {!loading && displayed.length === 0 && (
-              <tr>
-                <td colSpan={role === "admin" ? 11 : 9} style={{ textAlign: "center", padding: 30, color: "#555" }}>
-                  No reports match filters.
-                </td>
-              </tr>
-            )}
-            {!loading && displayed.map(r => (
-              <tr
-                key={r.id}
-                onClick={() => setDrawerReport(r)}
-                style={{
-                  borderBottom: "1px solid #1a1a2e",
-                  cursor: "pointer",
-                  background: r.outbreak_flag ? "rgba(249,115,22,0.06)" : "transparent",
-                }}
-                onMouseEnter={e => (e.currentTarget.style.background = "#111128")}
-                onMouseLeave={e => (e.currentTarget.style.background = r.outbreak_flag ? "rgba(249,115,22,0.06)" : "transparent")}
-              >
-                <td style={{ padding: "8px 12px", color: "#666" }}>{formatTime(r.timestamp)}</td>
-                <td style={{ padding: "8px 12px", color: "#555" }}>#{r.id}</td>
-                <td style={{ padding: "8px 12px" }}>
-                  <UrgencyBadge urgency={r.urgency} />
-                </td>
-                <td style={{ padding: "8px 12px", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {r.symptoms_summary || "—"}
-                </td>
-                <td style={{ padding: "8px 12px", color: "#8888aa" }}>{r.zone_name || "—"}</td>
-                {role === "admin" && (
-                  <td style={{ padding: "8px 12px", color: "#8888aa" }}>{r.district || "—"}</td>
-                )}
-                <td style={{ padding: "8px 12px", fontSize: 16 }}>{CHANNEL_ICON[r.channel] || r.channel}</td>
-                <td style={{ padding: "8px 12px" }}>
-                  <span style={{ fontSize: 11, background: "#1a1a3a", padding: "2px 6px", borderRadius: 4, color: "#8888cc" }}>
-                    {RESOLUTION_LABEL[r.resolution_method] || "—"}
-                  </span>
-                </td>
-                {role !== "asha_worker" && (
-                  <td style={{ padding: "8px 12px", color: "#555", fontSize: 12 }}>
-                    {r.assigned_worker_id || "—"}
+            </thead>
+            <tbody className="divide-y divide-dark-700">
+              {loading && (
+                <tr>
+                  <td colSpan={20} className="py-12 text-center text-gray-500">
+                    <RefreshCw size={18} className="animate-spin inline mr-2 opacity-40" />
+                    Loading reports…
                   </td>
-                )}
-                <td style={{ padding: "8px 12px" }}>
-                  <FollowUpBadge status={r.follow_up_status} />
-                </td>
-                <td style={{ padding: "8px 12px", textAlign: "center" }}>
-                  {r.outbreak_flag && <span style={{ color: "#f97316" }}>⚠</span>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </tr>
+              )}
+              {!loading && displayed.length === 0 && (
+                <tr>
+                  <td colSpan={20} className="py-12 text-center text-gray-500">
+                    No reports match the current filters.
+                  </td>
+                </tr>
+              )}
+              {!loading && displayed.map(r => (
+                <tr
+                  key={r.id}
+                  onClick={() => setDrawer(r)}
+                  className={`hover:bg-dark-700/60 cursor-pointer transition-colors ${r.outbreak_flag ? "bg-orange-950/20" : ""}`}
+                >
+                  <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">{fmtTime(r.timestamp)}</td>
+                  <td className="px-4 py-3 text-gray-600 text-xs">#{r.id}</td>
+                  <td className="px-4 py-3"><UrgencyBadge u={r.urgency} /></td>
+                  <td className="px-4 py-3 text-gray-200 max-w-[200px] truncate">{r.symptoms_summary || "—"}</td>
+                  <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{r.zone_name || "—"}</td>
+                  {role === "admin" && <td className="px-4 py-3 text-gray-400 text-xs">{r.district || "—"}</td>}
+                  <td className="px-4 py-3">{CHANNEL_ICON[r.channel] || <span className="text-gray-600 text-xs">{r.channel}</span>}</td>
+                  <td className="px-4 py-3">
+                    <span className={`text-xs font-mono ${RESOLUTION[r.resolution_method]?.cls || "text-gray-600"}`}>
+                      {RESOLUTION[r.resolution_method]?.label || "—"}
+                    </span>
+                  </td>
+                  {role !== "asha_worker" && (
+                    <td className="px-4 py-3 text-gray-600 text-xs">{r.assigned_worker_id || "—"}</td>
+                  )}
+                  <td className="px-4 py-3"><StatusBadge s={r.follow_up_status} /></td>
+                  <td className="px-4 py-3 text-center">
+                    {r.outbreak_flag && <AlertTriangle size={13} className="text-orange-400 inline" />}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
+        {pagination.pages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-dark-600 text-sm text-gray-400">
+            <span>
+              Page {page} of {pagination.pages} &nbsp;·&nbsp; {pagination.total} total
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="p-1.5 rounded-lg hover:bg-dark-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <button
+                onClick={() => setPage(p => Math.min(pagination.pages, p + 1))}
+                disabled={page >= pagination.pages}
+                className="p-1.5 rounded-lg hover:bg-dark-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Pagination */}
-      {pagination.pages > 1 && (
-        <div style={{ display: "flex", gap: 8, padding: "12px 20px", alignItems: "center", justifyContent: "flex-end", borderTop: "1px solid #1e1e3a" }}>
-          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} style={pageBtnStyle(page > 1)}>
-            Prev
-          </button>
-          <span style={{ fontSize: 13, color: "#666" }}>
-            {page} / {pagination.pages}
-          </span>
-          <button onClick={() => setPage(p => Math.min(pagination.pages, p + 1))} disabled={page >= pagination.pages} style={pageBtnStyle(page < pagination.pages)}>
-            Next
-          </button>
-        </div>
-      )}
-
       {/* Detail drawer */}
-      {drawerReport && (
-        <DetailDrawer report={drawerReport} onClose={() => setDrawerReport(null)} />
-      )}
+      {drawer && <DetailDrawer r={drawer} role={role} onClose={() => setDrawer(null)} />}
     </div>
   );
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function StatCard({ label, value, color }) {
+function StatCard({ icon, label, value, color, border }) {
   return (
-    <div style={{ background: "#111128", border: `1px solid ${color}33`, borderRadius: 8, padding: "10px 18px", minWidth: 100 }}>
-      <div style={{ fontSize: 22, fontWeight: "bold", color }}>{value}</div>
-      <div style={{ fontSize: 11, color: "#666", marginTop: 2 }}>{label}</div>
+    <div className={`bg-dark-800 rounded-xl p-4 border ${border} flex flex-col gap-1`}>
+      <div className={`flex items-center gap-1.5 ${color} mb-1`}>
+        {icon}
+        <span className="text-xs text-gray-500">{label}</span>
+      </div>
+      <div className={`text-2xl font-bold ${color}`}>{value}</div>
     </div>
   );
 }
 
-function UrgencyBadge({ urgency }) {
-  const color = URGENCY_COLOR[urgency] || "#888";
-  const label = URGENCY_LABEL[urgency] || urgency?.toUpperCase() || "—";
+function UrgencyBadge({ u }) {
+  const s = URGENCY[u] || { label: u?.toUpperCase() || "—", bg: "bg-gray-800", text: "text-gray-400", border: "border-gray-600" };
   return (
-    <span style={{
-      background: `${color}22`,
-      color,
-      border: `1px solid ${color}44`,
-      padding: "2px 8px",
-      borderRadius: 4,
-      fontSize: 11,
-      fontWeight: "bold",
-    }}>
-      {label}
-    </span>
-  );
-}
-
-function FollowUpBadge({ status }) {
-  const map = {
-    better: { label: "Better", color: "#22c55e" },
-    same: { label: "Same", color: "#f59e0b" },
-    worse: { label: "Worse", color: "#ef4444" },
-    pending: { label: "Pending", color: "#555" },
-  };
-  const s = map[status] || map.pending;
-  return (
-    <span style={{ fontSize: 11, color: s.color }}>
+    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${s.bg} ${s.text} border ${s.border}`}>
       {s.label}
     </span>
   );
 }
 
-function Th({ children, onClick }) {
+function StatusBadge({ s }) {
+  const map = {
+    better:  "text-green-400",
+    same:    "text-yellow-400",
+    worse:   "text-red-400",
+  };
+  return <span className={`text-xs ${map[s] || "text-gray-600"}`}>{s || "pending"}</span>;
+}
+
+function Th({ children }) {
+  return <th className="px-4 py-3 text-left whitespace-nowrap">{children}</th>;
+}
+
+function SortTh({ col, active, order, onSort, children }) {
+  const isActive = active === col;
   return (
     <th
-      onClick={onClick}
-      style={{
-        padding: "10px 12px",
-        fontWeight: 600,
-        fontSize: 12,
-        textTransform: "uppercase",
-        letterSpacing: 1,
-        cursor: onClick ? "pointer" : "default",
-        userSelect: "none",
-        whiteSpace: "nowrap",
-      }}
+      className="px-4 py-3 text-left whitespace-nowrap cursor-pointer hover:text-gray-300 select-none"
+      onClick={() => onSort(col)}
     >
-      {children}
+      <span className="flex items-center gap-1">
+        {children}
+        {isActive
+          ? order === "desc" ? <ChevronDown size={12} /> : <ChevronUp size={12} />
+          : <span className="opacity-20">⇅</span>
+        }
+      </span>
     </th>
   );
 }
 
-function Select({ label, value, onChange, options }) {
+function FilterSelect({ label, value, onChange, options }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-      <span style={{ fontSize: 12, color: "#666" }}>{label}:</span>
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        style={{
-          background: "#111128",
-          color: "#ccc",
-          border: "1px solid #2a2a4a",
-          borderRadius: 4,
-          padding: "4px 8px",
-          fontSize: 13,
-          cursor: "pointer",
-        }}
-      >
-        {options.map(o => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
-    </div>
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className="bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:ring-2 focus:ring-urgency-high/30 cursor-pointer"
+      title={label}
+    >
+      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
   );
 }
 
-function pageBtnStyle(enabled) {
-  return {
-    padding: "5px 12px",
-    background: enabled ? "#1e1e3a" : "#0d0d1a",
-    color: enabled ? "#aaa" : "#333",
-    border: "1px solid #2a2a4a",
-    borderRadius: 4,
-    cursor: enabled ? "pointer" : "not-allowed",
-    fontSize: 13,
-  };
-}
-
-function formatTime(ts) {
+function fmtTime(ts) {
   if (!ts) return "—";
   try {
-    const d = new Date(ts);
-    return d.toLocaleString("en-IN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
-  } catch {
-    return ts;
-  }
+    return new Date(ts).toLocaleString("en-IN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+  } catch { return ts; }
 }
 
 // ── Detail Drawer ─────────────────────────────────────────────────────────────
 
-function DetailDrawer({ report: r, onClose }) {
+function DetailDrawer({ r, role, onClose }) {
   return (
     <>
-      {/* Backdrop */}
-      <div
-        onClick={onClose}
-        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100 }}
-      />
-      {/* Panel */}
-      <div style={{
-        position: "fixed",
-        right: 0,
-        top: 0,
-        bottom: 0,
-        width: "min(460px, 100vw)",
-        background: "#0d0d1a",
-        borderLeft: "1px solid #1e1e3a",
-        zIndex: 101,
-        overflowY: "auto",
-        padding: 24,
-      }}>
-        <button
-          onClick={onClose}
-          style={{ position: "absolute", top: 16, right: 16, background: "none", border: "none", color: "#666", fontSize: 20, cursor: "pointer" }}
-        >
-          ✕
-        </button>
-
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 11, color: "#555", marginBottom: 4 }}>Report #{r.id}</div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <UrgencyBadge urgency={r.urgency} />
-            {r.outbreak_flag && (
-              <span style={{ background: "#f9731622", color: "#f97316", border: "1px solid #f9731644", padding: "2px 8px", borderRadius: 4, fontSize: 11, fontWeight: "bold" }}>
-                OUTBREAK
-              </span>
-            )}
+      <div onClick={onClose} className="fixed inset-0 bg-black/60 z-50" />
+      <div className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-dark-800 border-l border-dark-600 z-50 overflow-y-auto shadow-2xl">
+        <div className="sticky top-0 bg-dark-800 border-b border-dark-600 px-5 py-4 flex items-center justify-between">
+          <div>
+            <div className="text-xs text-gray-500 mb-1">Report #{r.id}</div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <UrgencyBadge u={r.urgency} />
+              {r.outbreak_flag && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-orange-500/15 text-orange-400 border border-orange-500/30">
+                  <AlertTriangle size={10} /> OUTBREAK
+                </span>
+              )}
+            </div>
           </div>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-dark-600 text-gray-400 hover:text-white transition-colors">
+            <X size={18} />
+          </button>
         </div>
 
-        <Section title="Symptoms">
-          <p style={{ color: "#ccc", margin: 0 }}>{r.symptoms_summary || "—"}</p>
-        </Section>
+        <div className="p-5 space-y-5">
+          <DrawerSection title="Symptoms">
+            <p className="text-gray-200 text-sm leading-relaxed">{r.symptoms_summary || "—"}</p>
+          </DrawerSection>
 
-        <Section title="Advice">
-          <p style={{ color: "#aaa", margin: 0, lineHeight: 1.6 }}>{r.advice || "—"}</p>
-        </Section>
+          <DrawerSection title="Advice">
+            <p className="text-gray-400 text-sm leading-relaxed">{r.advice || "—"}</p>
+          </DrawerSection>
 
-        <Section title="Location">
-          <Row label="Zone" value={r.zone_name || "—"} />
-          <Row label="District" value={r.district || "—"} />
-          <Row label="Method" value={RESOLUTION_LABEL[r.resolution_method] || "—"} />
-        </Section>
+          <DrawerSection title="Location">
+            <DrawerRow label="Zone"     value={r.zone_name || "—"} />
+            <DrawerRow label="District" value={r.district || "—"} />
+            <DrawerRow label="Method"   value={
+              <span className={`text-xs font-mono ${RESOLUTION[r.resolution_method]?.cls}`}>
+                {RESOLUTION[r.resolution_method]?.label || "—"}
+              </span>
+            } />
+          </DrawerSection>
 
-        <Section title="Signal Analysis">
-          <Row label="Cough Detected" value={r.has_cough ? "Yes" : "No"} />
-          <Row label="Cough Type" value={r.cough_type || "none"} />
-          <Row label="Voice Stress" value={r.voice_stress != null ? `${(r.voice_stress * 100).toFixed(0)}%` : "—"} />
-          <Row label="Language" value={r.language || "—"} />
-        </Section>
+          <DrawerSection title="Signal Analysis">
+            <DrawerRow label="Cough"        value={r.has_cough ? r.cough_type || "detected" : "—"} />
+            <DrawerRow label="Voice Stress" value={r.voice_stress != null ? `${(r.voice_stress * 100).toFixed(0)}%` : "—"} />
+            <DrawerRow label="Language"     value={r.language || "—"} />
+          </DrawerSection>
 
-        <Section title="Metadata">
-          <Row label="Channel" value={`${CHANNEL_ICON[r.channel] || ""} ${r.channel || "—"}`} />
-          <Row label="Follow-up" value={r.follow_up_status || "pending"} />
-          <Row label="Reported" value={r.timestamp ? new Date(r.timestamp).toLocaleString("en-IN") : "—"} />
-        </Section>
+          <DrawerSection title="Metadata">
+            <DrawerRow label="Channel"    value={
+              <span className="flex items-center gap-1.5 capitalize">
+                {CHANNEL_ICON[r.channel]} {r.channel}
+              </span>
+            } />
+            {role !== "asha_worker" && (
+              <DrawerRow label="Worker" value={r.assigned_worker_id || "unassigned"} />
+            )}
+            <DrawerRow label="Follow-up" value={<StatusBadge s={r.follow_up_status} />} />
+            <DrawerRow label="Reported"  value={r.timestamp ? new Date(r.timestamp).toLocaleString("en-IN") : "—"} />
+          </DrawerSection>
+        </div>
       </div>
     </>
   );
 }
 
-function Section({ title, children }) {
+function DrawerSection({ title, children }) {
   return (
-    <div style={{ marginBottom: 20 }}>
-      <div style={{ fontSize: 11, color: "#555", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8, borderBottom: "1px solid #1a1a2e", paddingBottom: 4 }}>
+    <div>
+      <div className="text-xs font-semibold text-gray-600 uppercase tracking-widest mb-2.5 pb-1.5 border-b border-dark-600">
         {title}
       </div>
-      {children}
+      <div className="space-y-2">{children}</div>
     </div>
   );
 }
 
-function Row({ label, value }) {
+function DrawerRow({ label, value }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 13 }}>
-      <span style={{ color: "#555" }}>{label}</span>
-      <span style={{ color: "#ccc" }}>{value}</span>
+    <div className="flex justify-between items-center text-sm">
+      <span className="text-gray-500">{label}</span>
+      <span className="text-gray-200">{value}</span>
     </div>
   );
 }
