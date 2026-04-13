@@ -102,13 +102,11 @@ def _start_telegram_thread():
         return
 
     def _run():
-        import asyncio
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
         try:
             from telegram_bot import build_app
             bot_app = build_app()
-            loop.run_until_complete(bot_app.run_polling(drop_pending_updates=True))
+            # Disable signal handlers because we are in a background thread
+            bot_app.run_polling(drop_pending_updates=True, stop_signals=False)
         except Exception as e:
             logger.error(f"Telegram thread error: {e}")
 
