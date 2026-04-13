@@ -103,6 +103,10 @@ def _start_telegram_thread():
 
     def _run():
         try:
+            # Ensure a new event loop exists for this background thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
             from telegram_bot import build_app
             bot_app = build_app()
             # Disable signal handlers because we are in a background thread
