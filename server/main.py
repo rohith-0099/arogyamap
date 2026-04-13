@@ -15,9 +15,13 @@ from typing import Optional
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
-from fastapi import FastAPI, Form, File, UploadFile, HTTPException
+from fastapi import FastAPI, Form, File, UploadFile, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
+
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 load_dotenv()
 
@@ -136,11 +140,16 @@ def _start_email_thread():
 
 
 # ── FastAPI app ─────────────────────────────────────────────────────────────
+# ── Rate Limiter Configuration ──────────────────────────────────────────────
+limiter = Limiter(key_func=get_remote_address)
+
 app = FastAPI(
     title="ArogyaMap API",
     version="1.0.0",
     lifespan=lifespan,
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -156,7 +165,9 @@ async def health():
 
 
 @app.post("/process")
+@limiter.limit("5/minute")
 async def process_report(
+    request: Request,
     audio: Optional[UploadFile] = File(None),
     photo: Optional[UploadFile] = File(None),
     text: Optional[str] = Form(None),
@@ -273,7 +284,8 @@ async def process_report(
 
 
 @app.get("/outbreak")
-async def get_outbreak():
+@limiter.limit("30/minute")
+async def get_outbreak(request: Request):
     """Run outbreak detection and return clusters."""
     clusters = run_outbreak_detection()
     return {"clusters": clusters}
