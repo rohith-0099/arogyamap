@@ -5,7 +5,8 @@ import os
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-import os
+import numpy as np
+from sklearn.neighbors import BallTree
 
 # Lazy imports
 _prophet = None
@@ -24,14 +25,17 @@ def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-def detect_clusters(reports: list[dict], radius_km: float = 2.0, min_count: int = 5) -> list[dict]:
+def detect_clusters(reports: list[dict], radius_km: float = 2.0, min_count: int = 5, max_hours: int = 6) -> list[dict]:
     """
     Cluster reports by symptom category and geographic proximity.
-    Returns list of clusters with 5+ reports within 2km.
+    Fix 1: Uses BallTree (Connected Components) to ensure density.
+    Fix 2: Adds temporal window filtering (max_hours).
     """
-    clusters = []
-    used = set()
+    if not reports:
+        return []
 
+    clusters = []
+    
     # Group by symptom category
     by_symptom: dict[str, list] = {}
     for r in reports:
@@ -41,33 +45,67 @@ def detect_clusters(reports: list[dict], radius_km: float = 2.0, min_count: int 
         by_symptom.setdefault(sym, []).append(r)
 
     for symptom, sym_reports in by_symptom.items():
-        for i, anchor in enumerate(sym_reports):
-            if anchor["id"] in used:
-                continue
-            cluster = [anchor]
-            for j, candidate in enumerate(sym_reports):
-                if i == j or candidate["id"] in used:
-                    continue
-                dist = haversine_km(
-                    anchor["lat"], anchor["lng"],
-                    candidate["lat"], candidate["lng"],
-                )
-                if dist <= radius_km:
-                    cluster.append(candidate)
+        if len(sym_reports) < min_count:
+            continue
 
-            if len(cluster) >= min_count:
-                for r in cluster:
-                    used.add(r["id"])
-                lat_c = sum(r["lat"] for r in cluster) / len(cluster)
-                lng_c = sum(r["lng"] for r in cluster) / len(cluster)
-                clusters.append({
-                    "symptom_category": symptom,
-                    "count": len(cluster),
-                    "lat": lat_c,
-                    "lng": lng_c,
-                    "area": cluster[0].get("city"),
-                    "report_ids": [r["id"] for r in cluster],
-                })
+        # Prepare spatial data for BallTree (must be in radians)
+        coords = np.array([[math.radians(r["lat"]), math.radians(r["lng"])] for r in sym_reports])
+        # Parse timestamps into seconds for temporal comparison
+        timestamps = []
+        for r in sym_reports:
+            t = datetime.fromisoformat(r["timestamp"].replace("Z", "+00:00"))
+            timestamps.append(t.timestamp())
+        timestamps = np.array(timestamps)
+
+        # Build BallTree for O(N log N) spatial search
+        # Earth radius = 6371km
+        tree = BallTree(coords, metric='haversine')
+        # find neighbor indices within threshold
+        neighbor_indices = tree.query_radius(coords, r=radius_km / 6371.0)
+
+        # Build adjacency graph based on spatial AND temporal proximity
+        adj = {}
+        for i, neighbors in enumerate(neighbor_indices):
+            adj[i] = []
+            for j in neighbors:
+                if i == j: continue
+                # Check temporal window (Fix 2)
+                if abs(timestamps[i] - timestamps[j]) <= max_hours * 3600:
+                    adj[i].append(j)
+
+        # Find Connected Components (Fix 1: density logic)
+        visited = set()
+        for i in range(len(sym_reports)):
+            if i not in visited:
+                # BFS to find component
+                component = []
+                queue = [i]
+                visited.add(i)
+                while queue:
+                    curr = queue.pop(0)
+                    component.append(curr)
+                    for neighbor in adj[curr]:
+                        if neighbor not in visited:
+                            visited.add(neighbor)
+                            queue.append(neighbor)
+                
+                # If component is large enough, it's a cluster
+                if len(component) >= min_count:
+                    cluster_reports = [sym_reports[idx] for idx in component]
+                    lat_c = sum(r["lat"] for r in cluster_reports) / len(cluster_reports)
+                    lng_c = sum(r["lng"] for r in cluster_reports) / len(cluster_reports)
+                    area = cluster_reports[0].get("city") or "Unknown"
+                    
+                    print(f"[outbreak] Cluster found: {symptom}, {len(cluster_reports)} reports near {area}")
+                    
+                    clusters.append({
+                        "symptom_category": symptom,
+                        "count": len(cluster_reports),
+                        "lat": lat_c,
+                        "lng": lng_c,
+                        "area": area,
+                        "report_ids": [r["id"] for r in cluster_reports],
+                    })
 
     return clusters
 
