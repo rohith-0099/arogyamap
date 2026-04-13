@@ -41,6 +41,8 @@ export default function PatientList({ role = "admin", zone = null, district = nu
   const [filterChannel, setFilterChannel] = useState("");
   const [filterOutbreak, setFilterOutbreak] = useState(false);
   const [filterHours, setFilterHours] = useState(48);
+  const [filterDistrict, setFilterDistrict] = useState(district || "");
+  const [search, setSearch] = useState("");
 
   // Sorting
   const [sortBy, setSortBy] = useState("timestamp");
@@ -65,7 +67,8 @@ export default function PatientList({ role = "admin", zone = null, district = nu
         order: sortOrder,
       });
       if (zone) params.set("zone", zone);
-      if (district) params.set("district", district);
+      const effectiveDistrict = role === "admin" ? filterDistrict : district;
+      if (effectiveDistrict) params.set("district", effectiveDistrict);
       if (filterUrgency) params.set("urgency", filterUrgency);
       if (filterChannel) params.set("channel", filterChannel);
       if (filterOutbreak) params.set("outbreak_only", "true");
@@ -91,7 +94,7 @@ export default function PatientList({ role = "admin", zone = null, district = nu
   // Reset page when filters change
   useEffect(() => {
     setPage(1);
-  }, [filterUrgency, filterChannel, filterOutbreak, filterHours, sortBy, sortOrder]);
+  }, [filterUrgency, filterChannel, filterOutbreak, filterHours, filterDistrict, search, sortBy, sortOrder]);
 
   function toggleSort(col) {
     if (sortBy === col) {
@@ -108,20 +111,67 @@ export default function PatientList({ role = "admin", zone = null, district = nu
   }
 
   const urgencyCounts = stats.by_urgency || {};
+  // Client-side search filter on symptoms
+  const displayed = search.trim()
+    ? reports.filter(r => r.symptoms_summary?.toLowerCase().includes(search.toLowerCase()))
+    : reports;
 
   return (
     <div style={{ background: "#0d0d1a", color: "#e0e0e0", minHeight: "100vh", fontFamily: "monospace" }}>
       {/* Stats row */}
       <div style={{ display: "flex", gap: 16, padding: "16px 20px", borderBottom: "1px solid #1e1e3a", flexWrap: "wrap" }}>
         <StatCard label="Total Reports" value={stats.total} color="#6366f1" />
-        <StatCard label="High" value={urgencyCounts.high || 0} color="#ef4444" />
+        <StatCard label="Critical" value={urgencyCounts.high || 0} color="#ef4444" />
         <StatCard label="Medium" value={urgencyCounts.medium || 0} color="#f59e0b" />
         <StatCard label="Low" value={urgencyCounts.low || 0} color="#22c55e" />
-        <StatCard label="Outbreak" value={stats.outbreak_count || 0} color="#f97316" />
+        <StatCard label="Pending Follow-up" value={reports.filter(r => !r.follow_up_status || r.follow_up_status === "pending").length} color="#a855f7" />
+        <StatCard label="Outbreak Flags" value={stats.outbreak_count || 0} color="#f97316" />
       </div>
 
       {/* Filter bar */}
       <div style={{ display: "flex", gap: 10, padding: "12px 20px", flexWrap: "wrap", alignItems: "center", borderBottom: "1px solid #1e1e3a" }}>
+        {/* Search */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 12, color: "#666" }}>Search:</span>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="symptoms…"
+            style={{
+              background: "#111128",
+              color: "#ccc",
+              border: "1px solid #2a2a4a",
+              borderRadius: 4,
+              padding: "4px 8px",
+              fontSize: 13,
+              width: 130,
+            }}
+          />
+        </div>
+
+        {/* District filter — admin only */}
+        {role === "admin" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 12, color: "#666" }}>District:</span>
+            <input
+              type="text"
+              value={filterDistrict}
+              onChange={e => setFilterDistrict(e.target.value)}
+              placeholder="any district"
+              style={{
+                background: "#111128",
+                color: "#ccc",
+                border: "1px solid #2a2a4a",
+                borderRadius: 4,
+                padding: "4px 8px",
+                fontSize: 13,
+                width: 130,
+              }}
+            />
+          </div>
+        )}
+
         <Select
           label="Urgency"
           value={filterUrgency}
@@ -174,8 +224,10 @@ export default function PatientList({ role = "admin", zone = null, district = nu
               <Th onClick={() => toggleSort("urgency")}>Urgency <SortIndicator col="urgency" /></Th>
               <Th>Symptoms</Th>
               <Th>Zone</Th>
+              {role === "admin" && <Th>District</Th>}
               <Th>Ch</Th>
               <Th>Loc</Th>
+              {role !== "asha_worker" && <Th>Worker</Th>}
               <Th>Status</Th>
               <Th>OB</Th>
             </tr>
@@ -183,19 +235,19 @@ export default function PatientList({ role = "admin", zone = null, district = nu
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={9} style={{ textAlign: "center", padding: 30, color: "#555" }}>
+                <td colSpan={role === "admin" ? 11 : 9} style={{ textAlign: "center", padding: 30, color: "#555" }}>
                   Loading…
                 </td>
               </tr>
             )}
-            {!loading && reports.length === 0 && (
+            {!loading && displayed.length === 0 && (
               <tr>
-                <td colSpan={9} style={{ textAlign: "center", padding: 30, color: "#555" }}>
+                <td colSpan={role === "admin" ? 11 : 9} style={{ textAlign: "center", padding: 30, color: "#555" }}>
                   No reports match filters.
                 </td>
               </tr>
             )}
-            {!loading && reports.map(r => (
+            {!loading && displayed.map(r => (
               <tr
                 key={r.id}
                 onClick={() => setDrawerReport(r)}
@@ -216,12 +268,20 @@ export default function PatientList({ role = "admin", zone = null, district = nu
                   {r.symptoms_summary || "—"}
                 </td>
                 <td style={{ padding: "8px 12px", color: "#8888aa" }}>{r.zone_name || "—"}</td>
+                {role === "admin" && (
+                  <td style={{ padding: "8px 12px", color: "#8888aa" }}>{r.district || "—"}</td>
+                )}
                 <td style={{ padding: "8px 12px", fontSize: 16 }}>{CHANNEL_ICON[r.channel] || r.channel}</td>
                 <td style={{ padding: "8px 12px" }}>
                   <span style={{ fontSize: 11, background: "#1a1a3a", padding: "2px 6px", borderRadius: 4, color: "#8888cc" }}>
                     {RESOLUTION_LABEL[r.resolution_method] || "—"}
                   </span>
                 </td>
+                {role !== "asha_worker" && (
+                  <td style={{ padding: "8px 12px", color: "#555", fontSize: 12 }}>
+                    {r.assigned_worker_id || "—"}
+                  </td>
+                )}
                 <td style={{ padding: "8px 12px" }}>
                   <FollowUpBadge status={r.follow_up_status} />
                 </td>
