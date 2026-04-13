@@ -137,3 +137,23 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Environment secrets
+.env.local
+.env
+.env.production
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+arogyamap.db
+
+# Graphify output
+graphify-out/
+
+# OS
+.DS_Store
+Thumbs.db
