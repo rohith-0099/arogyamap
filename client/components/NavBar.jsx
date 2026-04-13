@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Map, Mic, LayoutDashboard, BarChart3 } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { Map, Mic, LayoutDashboard, BarChart3, LogOut } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 const navItems = [
   { href: "/", label: "Live Map", icon: Map },
@@ -13,6 +15,27 @@ const navItems = [
 
 export default function NavBar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [user, setUser] = useState(null);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-[9999] bg-dark-800/95 backdrop-blur border-b border-dark-600">
@@ -45,6 +68,19 @@ export default function NavBar() {
               </Link>
             );
           })}
+
+          {/* Logout — only shown when authenticated */}
+          {user && (
+            <button
+              onClick={handleLogout}
+              disabled={loggingOut}
+              title={`Signed in as ${user.email}`}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-400 hover:text-urgency-high hover:bg-urgency-high/10 transition-all ml-1 disabled:opacity-50"
+            >
+              <LogOut size={16} />
+              <span className="hidden sm:inline">{loggingOut ? "…" : "Logout"}</span>
+            </button>
+          )}
         </div>
       </div>
     </nav>
