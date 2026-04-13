@@ -4,99 +4,142 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Globe, Send, Mail, AlertTriangle, Search, RefreshCw,
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
-  X, MapPin, Activity, Clock, Mic, User, Shield,
+  X, MapPin, Activity, Clock, Shield, User,
 } from "lucide-react";
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+
 const URGENCY = {
-  high:   { label: "HIGH",   bg: "bg-red-500/15",    text: "text-red-400",    border: "border-red-500/30"    },
-  medium: { label: "MED",    bg: "bg-orange-500/15", text: "text-orange-400", border: "border-orange-500/30" },
-  low:    { label: "LOW",    bg: "bg-green-500/15",  text: "text-green-400",  border: "border-green-500/30"  },
+  high:   { label: "HIGH", bg: "bg-red-500/15",    text: "text-red-400",    border: "border-red-500/30"    },
+  medium: { label: "MED",  bg: "bg-orange-500/15", text: "text-orange-400", border: "border-orange-500/30" },
+  low:    { label: "LOW",  bg: "bg-green-500/15",  text: "text-green-400",  border: "border-green-500/30"  },
 };
 
 const CHANNEL_ICON = {
   web:      <Globe size={14} className="text-blue-400" />,
-  telegram: <Send  size={14} className="text-sky-400" />,
+  telegram: <Send  size={14} className="text-sky-400"  />,
   email:    <Mail  size={14} className="text-purple-400" />,
 };
 
 const RESOLUTION = {
-  gps:        { label: "GPS",   cls: "text-green-400" },
+  gps:        { label: "GPS",   cls: "text-green-400"  },
   text_fuzzy: { label: "Fuzzy", cls: "text-yellow-400" },
   text_llm:   { label: "LLM",   cls: "text-purple-400" },
-  unassigned: { label: "—",     cls: "text-gray-600" },
+  unassigned: { label: "—",     cls: "text-gray-600"   },
 };
 
 const PAGE_SIZE = 25;
 const PYTHON_API = process.env.NEXT_PUBLIC_PYTHON_API_URL || "http://localhost:8000";
 
-export default function PatientList({ role = "admin", zone: propZone = null, district: propDistrict = null }) {
-  // Zone picker state
-  const [allDistricts, setAllDistricts] = useState([]);
-  const [zonesByDistrict, setZonesByDistrict] = useState({});
-  const [selectedDistrict, setSelectedDistrict] = useState(propDistrict || "");
-  const [selectedZone, setSelectedZone] = useState(propZone || "");
-  const [zonesReady, setZonesReady] = useState(false);
+// What each role can see in the location picker
+// asha_worker: district + city
+// supervisor:  district + city (district pre-set from profile)
+// admin:       country + state + district + city
+const ROLE_PICKER_LEVELS = {
+  asha_worker: ["district", "city"],
+  supervisor:  ["district", "city"],
+  admin:       ["country", "state", "district", "city"],
+};
 
-  // Report data
-  const [reports, setReports] = useState([]);
-  const [stats, setStats] = useState({ total: 0, by_urgency: {}, outbreak_count: 0 });
+// ── Main Component ────────────────────────────────────────────────────────────
+
+export default function PatientList({
+  role = "admin",
+  zone: propZone = null,
+  district: propDistrict = null,
+  state: propState = null,
+  country: propCountry = null,
+}) {
+  // Full hierarchy from /hierarchy endpoint
+  const [hierarchy, setHierarchy] = useState({
+    countries: [],
+    states_by_country: {},
+    districts_by_state: {},
+    cities_by_district: {},
+    city_meta: {},
+  });
+
+  // User's current selections in the location picker
+  const [sel, setSel] = useState({
+    country:  propCountry  || "",
+    state:    propState    || "",
+    district: propDistrict || "",
+    city:     "",           // city key (lowercase) from city_lookup
+  });
+
+  // Reports data
+  const [reports,    setReports]    = useState([]);
+  const [stats,      setStats]      = useState({ total: 0, by_urgency: {}, outbreak_count: 0 });
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [loading,    setLoading]    = useState(false);
+  const [error,      setError]      = useState(null);
   const [zoneRequired, setZoneRequired] = useState(false);
 
   // Filters
-  const [filterUrgency, setFilterUrgency] = useState("");
-  const [filterChannel, setFilterChannel] = useState("");
+  const [filterUrgency,  setFilterUrgency]  = useState("");
+  const [filterChannel,  setFilterChannel]  = useState("");
   const [filterOutbreak, setFilterOutbreak] = useState(false);
-  const [filterHours, setFilterHours] = useState(48);
-  const [search, setSearch] = useState("");
+  const [filterHours,    setFilterHours]    = useState(48);
+  const [search,         setSearch]         = useState("");
 
-  // Sort
-  const [sortBy, setSortBy] = useState("timestamp");
+  // Sort + page
+  const [sortBy,    setSortBy]    = useState("timestamp");
   const [sortOrder, setSortOrder] = useState("desc");
-
-  // Page
-  const [page, setPage] = useState(1);
+  const [page,      setPage]      = useState(1);
 
   // Drawer
   const [drawer, setDrawer] = useState(null);
 
-  // Load zones from backend
+  // ── Load hierarchy on mount ─────────────────────────────────────────────────
   useEffect(() => {
-    fetch(`${PYTHON_API}/zones`)
+    fetch(`${PYTHON_API}/hierarchy`)
       .then(r => r.json())
-      .then(d => {
-        setAllDistricts(d.districts || []);
-        setZonesByDistrict(d.zones_by_district || {});
-        setZonesReady(true);
-      })
-      .catch(() => setZonesReady(true));
+      .then(setHierarchy)
+      .catch(() => {});
   }, []);
 
-  const fetchReports = useCallback(async () => {
-    const effectiveZone = selectedZone || propZone;
-    const effectiveDistrict = selectedDistrict || propDistrict;
+  // ── Derived options from current selections ─────────────────────────────────
+  const availableStates    = sel.country  ? (hierarchy.states_by_country[sel.country]     || []) : Object.values(hierarchy.states_by_country).flat();
+  const availableDistricts = sel.state    ? (hierarchy.districts_by_state[sel.state]      || []) : Object.values(hierarchy.districts_by_state).flat();
+  const availableCities    = sel.district ? (hierarchy.cities_by_district[sel.district]   || []) : [];
 
+  // ── Cascade: clear child when parent changes ────────────────────────────────
+  function setCountry(v)  { setSel({ country: v, state: "", district: "", city: "" }); }
+  function setState_(v)   { setSel(s => ({ ...s, state: v, district: "", city: "" })); }
+  function setDistrict(v) { setSel(s => ({ ...s, district: v, city: "" })); }
+  function setCity(v)     { setSel(s => ({ ...s, city: v })); }
+
+  // ── Fetch reports ───────────────────────────────────────────────────────────
+  const fetchReports = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams({
         role,
-        hours: filterHours,
+        hours:     filterHours,
         page,
         page_size: PAGE_SIZE,
-        sort_by: sortBy,
-        order: sortOrder,
+        sort_by:   sortBy,
+        order:     sortOrder,
       });
-      if (effectiveZone) params.set("zone", effectiveZone);
-      if (effectiveDistrict) params.set("district", effectiveDistrict);
-      if (filterUrgency) params.set("urgency", filterUrgency);
-      if (filterChannel) params.set("channel", filterChannel);
-      if (filterOutbreak) params.set("outbreak_only", "true");
+
+      // Pass city key first (backend resolves zone/district/state/country from it)
+      if (sel.city)     params.set("city",     sel.city);
+      if (sel.district) params.set("district", sel.district);
+      if (sel.state)    params.set("state",    sel.state);
+      if (sel.country)  params.set("country",  sel.country);
+
+      // Profile-level fallbacks if nothing selected
+      if (!sel.district && propDistrict) params.set("district", propDistrict);
+      if (!sel.state    && propState)    params.set("state",    propState);
+      if (!sel.country  && propCountry)  params.set("country",  propCountry);
+
+      if (filterUrgency)  params.set("urgency",      filterUrgency);
+      if (filterChannel)  params.set("channel",      filterChannel);
+      if (filterOutbreak) params.set("outbreak_only","true");
 
       const res = await fetch(`${PYTHON_API}/dashboard/reports?${params}`);
-      if (!res.ok) throw new Error(`Server error: ${res.status}`);
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
       const data = await res.json();
 
       setZoneRequired(!!data.zone_required);
@@ -108,95 +151,116 @@ export default function PatientList({ role = "admin", zone: propZone = null, dis
     } finally {
       setLoading(false);
     }
-  }, [role, propZone, propDistrict, selectedZone, selectedDistrict, filterUrgency, filterChannel, filterOutbreak, filterHours, page, sortBy, sortOrder]);
+  }, [role, sel, propDistrict, propState, propCountry, filterUrgency, filterChannel, filterOutbreak, filterHours, page, sortBy, sortOrder]);
 
-  useEffect(() => {
-    fetchReports();
-  }, [fetchReports]);
-
-  useEffect(() => { setPage(1); }, [filterUrgency, filterChannel, filterOutbreak, filterHours, selectedZone, selectedDistrict, search, sortBy, sortOrder]);
+  useEffect(() => { fetchReports(); }, [fetchReports]);
+  useEffect(() => { setPage(1); }, [filterUrgency, filterChannel, filterOutbreak, filterHours, sel, search, sortBy, sortOrder]);
 
   function toggleSort(col) {
     if (sortBy === col) setSortOrder(o => o === "desc" ? "asc" : "desc");
     else { setSortBy(col); setSortOrder("desc"); }
   }
 
-  const pending = reports.filter(r => !r.follow_up_status || r.follow_up_status === "pending").length;
-  const u = stats.by_urgency || {};
-
+  const pending   = reports.filter(r => !r.follow_up_status || r.follow_up_status === "pending").length;
+  const u         = stats.by_urgency || {};
   const displayed = search.trim()
     ? reports.filter(r => r.symptoms_summary?.toLowerCase().includes(search.toLowerCase()))
     : reports;
 
-  const availableZones = selectedDistrict ? (zonesByDistrict[selectedDistrict] || []) : Object.values(zonesByDistrict).flat();
+  const levels = ROLE_PICKER_LEVELS[role] || ROLE_PICKER_LEVELS.admin;
 
-  // ── Zone picker (shown when asha_worker hasn't selected zone yet) ──────────
-  if (role === "asha_worker" && zoneRequired && zonesReady) {
+  // ── Location picker card (asha_worker without selection) ───────────────────
+  if (role === "asha_worker" && zoneRequired) {
     return (
       <div className="max-w-6xl mx-auto px-4 py-8">
-        <div className="bg-dark-800 rounded-xl border border-dark-600 p-8 max-w-md mx-auto text-center">
-          <div className="w-12 h-12 rounded-full bg-urgency-high/15 border border-urgency-high/30 flex items-center justify-center mx-auto mb-4">
-            <MapPin size={22} className="text-urgency-high" />
+        <div className="bg-dark-800 rounded-xl border border-dark-600 p-8 max-w-lg mx-auto">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-10 h-10 rounded-full bg-urgency-high/15 border border-urgency-high/30 flex items-center justify-center">
+              <MapPin size={18} className="text-urgency-high" />
+            </div>
+            <div>
+              <h3 className="text-white font-semibold">Select Your Area</h3>
+              <p className="text-gray-500 text-xs">Choose the district and city you are assigned to.</p>
+            </div>
           </div>
-          <h3 className="text-white font-semibold text-lg mb-1">Select Your Zone</h3>
-          <p className="text-gray-400 text-sm mb-6">Choose your district and zone to see your assigned reports.</p>
 
-          <div className="space-y-3 text-left">
-            <div>
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1.5 block">District</label>
-              <select
-                value={selectedDistrict}
-                onChange={e => { setSelectedDistrict(e.target.value); setSelectedZone(""); }}
-                className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-urgency-high/40"
-              >
-                <option value="">All districts</option>
-                {allDistricts.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1.5 block">Zone</label>
-              <select
-                value={selectedZone}
-                onChange={e => setSelectedZone(e.target.value)}
-                className="w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-urgency-high/40"
-              >
-                <option value="">All zones</option>
-                {availableZones.map(z => <option key={z} value={z}>{z}</option>)}
-              </select>
-            </div>
-            <button
-              onClick={fetchReports}
-              disabled={!selectedDistrict && !selectedZone}
-              className="w-full bg-urgency-high hover:bg-red-700 disabled:bg-dark-600 disabled:text-gray-600 text-white font-semibold py-2.5 rounded-lg transition-all mt-2"
-            >
-              Load Reports
-            </button>
+          <div className="space-y-3">
+            <PickerSelect
+              label="District"
+              value={sel.district}
+              onChange={setDistrict}
+              options={availableDistricts}
+              placeholder="Select district"
+            />
+            <PickerSelect
+              label="City"
+              value={sel.city}
+              onChange={setCity}
+              options={availableCities.map(c => ({ value: c.key, label: c.name }))}
+              placeholder={sel.district ? "Select city" : "Select district first"}
+              disabled={!sel.district}
+            />
           </div>
+
+          <button
+            onClick={fetchReports}
+            disabled={!sel.district}
+            className="mt-5 w-full bg-urgency-high hover:bg-red-700 disabled:bg-dark-600 disabled:text-gray-600 text-white font-semibold py-2.5 rounded-lg transition-all"
+          >
+            Load Reports
+          </button>
         </div>
       </div>
     );
   }
 
+  // ── Main view ───────────────────────────────────────────────────────────────
   return (
     <div className="max-w-6xl mx-auto px-4 pb-10">
 
       {/* Stats row */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
-        <StatCard icon={<Activity size={16} />} label="Total Reports"     value={stats.total}              color="text-indigo-400"  border="border-indigo-500/20" />
-        <StatCard icon={<AlertTriangle size={16} />} label="Critical"      value={u.high || 0}              color="text-red-400"     border="border-red-500/20" />
-        <StatCard icon={<Activity size={16} />} label="Medium"             value={u.medium || 0}            color="text-orange-400"  border="border-orange-500/20" />
-        <StatCard icon={<Activity size={16} />} label="Low"                value={u.low || 0}               color="text-green-400"   border="border-green-500/20" />
-        <StatCard icon={<Clock size={16} />}    label="Pending Follow-up"  value={pending}                  color="text-purple-400"  border="border-purple-500/20" />
-        <StatCard icon={<AlertTriangle size={16} />} label="Outbreak Flags" value={stats.outbreak_count||0} color="text-orange-400"  border="border-orange-500/20" />
+        <StatCard icon={<Activity size={15}/>}      label="Total"          value={stats.total}           color="text-indigo-400"  border="border-indigo-500/20"  />
+        <StatCard icon={<AlertTriangle size={15}/>} label="Critical"       value={u.high   || 0}         color="text-red-400"     border="border-red-500/20"     />
+        <StatCard icon={<Activity size={15}/>}      label="Medium"         value={u.medium || 0}         color="text-orange-400"  border="border-orange-500/20"  />
+        <StatCard icon={<Activity size={15}/>}      label="Low"            value={u.low    || 0}         color="text-green-400"   border="border-green-500/20"   />
+        <StatCard icon={<Clock size={15}/>}         label="Pending"        value={pending}               color="text-purple-400"  border="border-purple-500/20"  />
+        <StatCard icon={<AlertTriangle size={15}/>} label="Outbreaks"      value={stats.outbreak_count||0} color="text-orange-400" border="border-orange-500/20" />
       </div>
 
-      {/* Filters card */}
-      <div className="bg-dark-800 rounded-xl border border-dark-600 p-4 mb-4">
-        <div className="flex flex-wrap gap-3 items-center">
+      {/* Location breadcrumb */}
+      <LocationBreadcrumb sel={sel} role={role} cityMeta={hierarchy.city_meta} propDistrict={propDistrict} />
 
-          {/* Search */}
+      {/* Filters */}
+      <div className="bg-dark-800 rounded-xl border border-dark-600 p-4 mb-4">
+
+        {/* Location selectors row */}
+        <div className="flex flex-wrap gap-2 mb-3 pb-3 border-b border-dark-700">
+          {levels.includes("country") && (
+            <HierarchySelect label="Country"  value={sel.country}  onChange={setCountry}
+              options={hierarchy.countries} placeholder="All countries" />
+          )}
+          {levels.includes("state") && (
+            <HierarchySelect label="State"    value={sel.state}    onChange={setState_}
+              options={availableStates} placeholder="All states"
+              disabled={levels.includes("country") && !sel.country && hierarchy.countries.length > 1} />
+          )}
+          {levels.includes("district") && (
+            <HierarchySelect label="District" value={sel.district} onChange={setDistrict}
+              options={availableDistricts} placeholder="All districts" />
+          )}
+          {levels.includes("city") && (
+            <HierarchySelect label="City"     value={sel.city}     onChange={setCity}
+              options={availableCities.map(c => ({ value: c.key, label: c.name }))}
+              placeholder={sel.district ? "All cities" : "Select district first"}
+              disabled={!sel.district} />
+          )}
+        </div>
+
+        {/* Report filters row */}
+        <div className="flex flex-wrap gap-2 items-center">
           <div className="relative flex-1 min-w-[160px]">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
             <input
               type="text"
               value={search}
@@ -206,54 +270,22 @@ export default function PatientList({ role = "admin", zone: propZone = null, dis
             />
           </div>
 
-          {/* District — admin + supervisor can change, asha_worker sees their district */}
-          {role !== "asha_worker" && (
-            <FilterSelect
-              label="District"
-              value={selectedDistrict}
-              onChange={v => { setSelectedDistrict(v); setSelectedZone(""); }}
-              options={[{ value: "", label: "All districts" }, ...allDistricts.map(d => ({ value: d, label: d }))]}
-            />
-          )}
+          <FilterSelect value={filterUrgency} onChange={setFilterUrgency}
+            options={[{ value: "", label: "All urgency" }, { value: "high", label: "High" }, { value: "medium", label: "Medium" }, { value: "low", label: "Low" }]} />
 
-          {/* Zone */}
-          <FilterSelect
-            label="Zone"
-            value={selectedZone}
-            onChange={setSelectedZone}
-            options={[{ value: "", label: "All zones" }, ...availableZones.map(z => ({ value: z, label: z }))]}
-          />
+          <FilterSelect value={filterChannel} onChange={setFilterChannel}
+            options={[{ value: "", label: "All channels" }, { value: "web", label: "Web" }, { value: "telegram", label: "Telegram" }, { value: "email", label: "Email" }]} />
 
-          <FilterSelect
-            label="Urgency"
-            value={filterUrgency}
-            onChange={setFilterUrgency}
-            options={[{ value: "", label: "All urgency" }, { value: "high", label: "High" }, { value: "medium", label: "Medium" }, { value: "low", label: "Low" }]}
-          />
+          <FilterSelect value={filterHours} onChange={v => setFilterHours(Number(v))}
+            options={[{ value: 6, label: "6 hrs" }, { value: 24, label: "24 hrs" }, { value: 48, label: "48 hrs" }, { value: 168, label: "7 days" }, { value: 720, label: "30 days" }]} />
 
-          <FilterSelect
-            label="Channel"
-            value={filterChannel}
-            onChange={setFilterChannel}
-            options={[{ value: "", label: "All channels" }, { value: "web", label: "Web" }, { value: "telegram", label: "Telegram" }, { value: "email", label: "Email" }]}
-          />
-
-          <FilterSelect
-            label="Window"
-            value={filterHours}
-            onChange={v => setFilterHours(Number(v))}
-            options={[{ value: 6, label: "6h" }, { value: 24, label: "24h" }, { value: 48, label: "48h" }, { value: 168, label: "7 days" }]}
-          />
-
-          <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer select-none whitespace-nowrap">
+          <label className="flex items-center gap-1.5 text-sm text-gray-400 cursor-pointer select-none whitespace-nowrap">
             <input type="checkbox" checked={filterOutbreak} onChange={e => setFilterOutbreak(e.target.checked)} className="accent-orange-500 w-3.5 h-3.5" />
             Outbreak only
           </label>
 
-          <button
-            onClick={fetchReports}
-            className="ml-auto flex items-center gap-1.5 px-4 py-2 bg-dark-700 hover:bg-dark-600 border border-dark-600 text-gray-300 hover:text-white text-sm rounded-lg transition-all"
-          >
+          <button onClick={fetchReports}
+            className="ml-auto flex items-center gap-1.5 px-4 py-2 bg-dark-700 hover:bg-dark-600 border border-dark-600 text-gray-300 hover:text-white text-sm rounded-lg transition-all">
             <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
             Refresh
           </button>
@@ -263,8 +295,7 @@ export default function PatientList({ role = "admin", zone: propZone = null, dis
       {/* Error */}
       {error && (
         <div className="flex items-center gap-2 p-3 mb-4 bg-red-950/50 border border-red-500/30 rounded-lg text-red-400 text-sm">
-          <AlertTriangle size={15} />
-          {error}
+          <AlertTriangle size={15} />{error}
         </div>
       )}
 
@@ -273,13 +304,14 @@ export default function PatientList({ role = "admin", zone: propZone = null, dis
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-dark-600 text-gray-500 text-xs uppercase tracking-wide">
+              <tr className="border-b border-dark-600 text-gray-500 text-xs uppercase tracking-wide bg-dark-800">
                 <SortTh col="timestamp" active={sortBy} order={sortOrder} onSort={toggleSort}>Time</SortTh>
                 <Th>ID</Th>
                 <SortTh col="urgency" active={sortBy} order={sortOrder} onSort={toggleSort}>Urgency</SortTh>
                 <Th>Symptoms</Th>
-                <Th>Zone</Th>
-                {role === "admin" && <Th>District</Th>}
+                <Th>City / Zone</Th>
+                <Th>District</Th>
+                {role === "admin" && <Th>State</Th>}
                 <Th>Ch</Th>
                 <Th>Loc</Th>
                 {role !== "asha_worker" && <Th>Worker</Th>}
@@ -289,33 +321,26 @@ export default function PatientList({ role = "admin", zone: propZone = null, dis
             </thead>
             <tbody className="divide-y divide-dark-700">
               {loading && (
-                <tr>
-                  <td colSpan={20} className="py-12 text-center text-gray-500">
-                    <RefreshCw size={18} className="animate-spin inline mr-2 opacity-40" />
-                    Loading reports…
-                  </td>
-                </tr>
+                <tr><td colSpan={20} className="py-12 text-center text-gray-500">
+                  <RefreshCw size={16} className="animate-spin inline mr-2 opacity-40" />Loading…
+                </td></tr>
               )}
               {!loading && displayed.length === 0 && (
-                <tr>
-                  <td colSpan={20} className="py-12 text-center text-gray-500">
-                    No reports match the current filters.
-                  </td>
-                </tr>
+                <tr><td colSpan={20} className="py-12 text-center text-gray-500">
+                  No reports match the current filters.
+                </td></tr>
               )}
               {!loading && displayed.map(r => (
-                <tr
-                  key={r.id}
-                  onClick={() => setDrawer(r)}
-                  className={`hover:bg-dark-700/60 cursor-pointer transition-colors ${r.outbreak_flag ? "bg-orange-950/20" : ""}`}
-                >
-                  <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">{fmtTime(r.timestamp)}</td>
+                <tr key={r.id} onClick={() => setDrawer(r)}
+                  className={`hover:bg-dark-700/60 cursor-pointer transition-colors ${r.outbreak_flag ? "bg-orange-950/10" : ""}`}>
+                  <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">{fmtTime(r.timestamp)}</td>
                   <td className="px-4 py-3 text-gray-600 text-xs">#{r.id}</td>
                   <td className="px-4 py-3"><UrgencyBadge u={r.urgency} /></td>
                   <td className="px-4 py-3 text-gray-200 max-w-[200px] truncate">{r.symptoms_summary || "—"}</td>
                   <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{r.zone_name || "—"}</td>
-                  {role === "admin" && <td className="px-4 py-3 text-gray-400 text-xs">{r.district || "—"}</td>}
-                  <td className="px-4 py-3">{CHANNEL_ICON[r.channel] || <span className="text-gray-600 text-xs">{r.channel}</span>}</td>
+                  <td className="px-4 py-3 text-gray-400 text-xs">{r.district || "—"}</td>
+                  {role === "admin" && <td className="px-4 py-3 text-gray-500 text-xs">{r.state || "—"}</td>}
+                  <td className="px-4 py-3">{CHANNEL_ICON[r.channel] || <span className="text-gray-600">{r.channel}</span>}</td>
                   <td className="px-4 py-3">
                     <span className={`text-xs font-mono ${RESOLUTION[r.resolution_method]?.cls || "text-gray-600"}`}>
                       {RESOLUTION[r.resolution_method]?.label || "—"}
@@ -336,32 +361,45 @@ export default function PatientList({ role = "admin", zone: propZone = null, dis
 
         {/* Pagination */}
         {pagination.pages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-dark-600 text-sm text-gray-400">
-            <span>
-              Page {page} of {pagination.pages} &nbsp;·&nbsp; {pagination.total} total
-            </span>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                className="p-1.5 rounded-lg hover:bg-dark-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <button
-                onClick={() => setPage(p => Math.min(pagination.pages, p + 1))}
-                disabled={page >= pagination.pages}
-                className="p-1.5 rounded-lg hover:bg-dark-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronRight size={16} />
-              </button>
+          <div className="flex items-center justify-between px-4 py-3 border-t border-dark-600 text-sm text-gray-500">
+            <span>Page {page} / {pagination.pages} &nbsp;·&nbsp; {pagination.total} reports</span>
+            <div className="flex gap-1">
+              <PageBtn onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}><ChevronLeft size={15} /></PageBtn>
+              <PageBtn onClick={() => setPage(p => Math.min(pagination.pages, p + 1))} disabled={page >= pagination.pages}><ChevronRight size={15} /></PageBtn>
             </div>
           </div>
         )}
       </div>
 
-      {/* Detail drawer */}
       {drawer && <DetailDrawer r={drawer} role={role} onClose={() => setDrawer(null)} />}
+    </div>
+  );
+}
+
+// ── Location breadcrumb ───────────────────────────────────────────────────────
+
+function LocationBreadcrumb({ sel, role, cityMeta, propDistrict }) {
+  const parts = [];
+  if (sel.country)  parts.push(sel.country);
+  if (sel.state)    parts.push(sel.state);
+  const district = sel.district || propDistrict;
+  if (district)     parts.push(district);
+  if (sel.city) {
+    const meta = cityMeta[sel.city];
+    parts.push(meta ? meta.zone || sel.city.replace(/\b\w/g, c => c.toUpperCase()) : sel.city);
+  }
+
+  if (parts.length === 0) return null;
+
+  return (
+    <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-3 px-1">
+      <MapPin size={11} className="text-gray-600" />
+      {parts.map((p, i) => (
+        <span key={i} className="flex items-center gap-1.5">
+          {i > 0 && <span className="text-gray-700">›</span>}
+          <span className={i === parts.length - 1 ? "text-gray-300 font-medium" : ""}>{p}</span>
+        </span>
+      ))}
     </div>
   );
 }
@@ -370,8 +408,8 @@ export default function PatientList({ role = "admin", zone: propZone = null, dis
 
 function StatCard({ icon, label, value, color, border }) {
   return (
-    <div className={`bg-dark-800 rounded-xl p-4 border ${border} flex flex-col gap-1`}>
-      <div className={`flex items-center gap-1.5 ${color} mb-1`}>
+    <div className={`bg-dark-800 rounded-xl p-4 border ${border}`}>
+      <div className={`flex items-center gap-1.5 mb-1 ${color}`}>
         {icon}
         <span className="text-xs text-gray-500">{label}</span>
       </div>
@@ -381,7 +419,7 @@ function StatCard({ icon, label, value, color, border }) {
 }
 
 function UrgencyBadge({ u }) {
-  const s = URGENCY[u] || { label: u?.toUpperCase() || "—", bg: "bg-gray-800", text: "text-gray-400", border: "border-gray-600" };
+  const s = URGENCY[u] || { label: u?.toUpperCase() || "—", bg: "bg-gray-800", text: "text-gray-400", border: "border-gray-700" };
   return (
     <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold ${s.bg} ${s.text} border ${s.border}`}>
       {s.label}
@@ -390,12 +428,8 @@ function UrgencyBadge({ u }) {
 }
 
 function StatusBadge({ s }) {
-  const map = {
-    better:  "text-green-400",
-    same:    "text-yellow-400",
-    worse:   "text-red-400",
-  };
-  return <span className={`text-xs ${map[s] || "text-gray-600"}`}>{s || "pending"}</span>;
+  const cls = { better: "text-green-400", same: "text-yellow-400", worse: "text-red-400" };
+  return <span className={`text-xs ${cls[s] || "text-gray-600"}`}>{s || "pending"}</span>;
 }
 
 function Th({ children }) {
@@ -403,33 +437,64 @@ function Th({ children }) {
 }
 
 function SortTh({ col, active, order, onSort, children }) {
-  const isActive = active === col;
+  const on = active === col;
   return (
-    <th
-      className="px-4 py-3 text-left whitespace-nowrap cursor-pointer hover:text-gray-300 select-none"
-      onClick={() => onSort(col)}
-    >
+    <th onClick={() => onSort(col)}
+      className="px-4 py-3 text-left whitespace-nowrap cursor-pointer hover:text-gray-300 select-none">
       <span className="flex items-center gap-1">
         {children}
-        {isActive
-          ? order === "desc" ? <ChevronDown size={12} /> : <ChevronUp size={12} />
-          : <span className="opacity-20">⇅</span>
-        }
+        {on ? (order === "desc" ? <ChevronDown size={11}/> : <ChevronUp size={11}/>) : <span className="opacity-20">⇅</span>}
       </span>
     </th>
   );
 }
 
-function FilterSelect({ label, value, onChange, options }) {
+function FilterSelect({ value, onChange, options }) {
   return (
-    <select
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      className="bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:ring-2 focus:ring-urgency-high/30 cursor-pointer"
-      title={label}
-    >
+    <select value={value} onChange={e => onChange(e.target.value)}
+      className="bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:ring-2 focus:ring-urgency-high/30 cursor-pointer">
       {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
+  );
+}
+
+function HierarchySelect({ label, value, onChange, options, placeholder, disabled }) {
+  // options can be strings or {value, label} objects
+  const normalised = options.map(o => typeof o === "string" ? { value: o, label: o } : o);
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-xs text-gray-600 whitespace-nowrap">{label}:</span>
+      <select value={value} onChange={e => onChange(e.target.value)} disabled={disabled}
+        className={`bg-dark-700 border border-dark-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-urgency-high/30 cursor-pointer
+          ${value ? "text-white" : "text-gray-500"} ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}>
+        <option value="">{placeholder}</option>
+        {normalised.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function PickerSelect({ label, value, onChange, options, placeholder, disabled }) {
+  const normalised = options.map(o => typeof o === "string" ? { value: o, label: o } : o);
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1.5">{label}</label>
+      <select value={value} onChange={e => onChange(e.target.value)} disabled={disabled}
+        className={`w-full bg-dark-700 border border-dark-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-urgency-high/40
+          ${value ? "text-white" : "text-gray-500"} ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}>
+        <option value="">{placeholder}</option>
+        {normalised.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function PageBtn({ onClick, disabled, children }) {
+  return (
+    <button onClick={onClick} disabled={disabled}
+      className="p-1.5 rounded-lg hover:bg-dark-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+      {children}
+    </button>
   );
 }
 
@@ -474,9 +539,11 @@ function DetailDrawer({ r, role, onClose }) {
           </DrawerSection>
 
           <DrawerSection title="Location">
-            <DrawerRow label="Zone"     value={r.zone_name || "—"} />
-            <DrawerRow label="District" value={r.district || "—"} />
-            <DrawerRow label="Method"   value={
+            <DrawerRow label="City / Zone" value={r.zone_name || "—"} />
+            <DrawerRow label="District"    value={r.district  || "—"} />
+            <DrawerRow label="State"       value={r.state     || "—"} />
+            <DrawerRow label="Country"     value={r.country   || "—"} />
+            <DrawerRow label="Method"      value={
               <span className={`text-xs font-mono ${RESOLUTION[r.resolution_method]?.cls}`}>
                 {RESOLUTION[r.resolution_method]?.label || "—"}
               </span>
@@ -484,20 +551,14 @@ function DetailDrawer({ r, role, onClose }) {
           </DrawerSection>
 
           <DrawerSection title="Signal Analysis">
-            <DrawerRow label="Cough"        value={r.has_cough ? r.cough_type || "detected" : "—"} />
+            <DrawerRow label="Cough"        value={r.has_cough ? (r.cough_type || "detected") : "—"} />
             <DrawerRow label="Voice Stress" value={r.voice_stress != null ? `${(r.voice_stress * 100).toFixed(0)}%` : "—"} />
             <DrawerRow label="Language"     value={r.language || "—"} />
           </DrawerSection>
 
           <DrawerSection title="Metadata">
-            <DrawerRow label="Channel"    value={
-              <span className="flex items-center gap-1.5 capitalize">
-                {CHANNEL_ICON[r.channel]} {r.channel}
-              </span>
-            } />
-            {role !== "asha_worker" && (
-              <DrawerRow label="Worker" value={r.assigned_worker_id || "unassigned"} />
-            )}
+            <DrawerRow label="Channel"   value={<span className="flex items-center gap-1.5 capitalize">{CHANNEL_ICON[r.channel]} {r.channel}</span>} />
+            {role !== "asha_worker" && <DrawerRow label="Worker" value={r.assigned_worker_id || "unassigned"} />}
             <DrawerRow label="Follow-up" value={<StatusBadge s={r.follow_up_status} />} />
             <DrawerRow label="Reported"  value={r.timestamp ? new Date(r.timestamp).toLocaleString("en-IN") : "—"} />
           </DrawerSection>
@@ -510,9 +571,7 @@ function DetailDrawer({ r, role, onClose }) {
 function DrawerSection({ title, children }) {
   return (
     <div>
-      <div className="text-xs font-semibold text-gray-600 uppercase tracking-widest mb-2.5 pb-1.5 border-b border-dark-600">
-        {title}
-      </div>
+      <div className="text-xs font-semibold text-gray-600 uppercase tracking-widest mb-2.5 pb-1.5 border-b border-dark-700">{title}</div>
       <div className="space-y-2">{children}</div>
     </div>
   );
