@@ -21,11 +21,11 @@ ASHA workers get a dashboard with urgency rankings and optimised visit routes.
 - **Clinics**: OpenStreetMap Overpass API
 
 ## Key Directories
-- `app/` — Next.js pages and API routes
-- `components/` — React components
-- `lib/` — Supabase clients
-- `python/` — FastAPI server + all background workers
-- `public/` — PWA assets
+- `client/` — Next.js frontend project
+- `server/` — FastAPI backend project
+- `client/app/` — Next.js pages and API routes
+- `client/components/` — React UI components
+- `server/main.py` — Backend entry point
 
 ## Supabase Table: reports
 id, user_hash, lat, lng, city, symptoms_raw, symptoms_summary, urgency,

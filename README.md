@@ -18,18 +18,25 @@ cp .env.local.example .env.local
 
 ### 3. Install and seed
 ```bash
-npm install
-python3 -m venv .venv && .venv/bin/pip install -r python/requirements.txt
-.venv/bin/python3 python/seed.py   # 25 demo reports
+# Frontend
+cd client && npm install
+
+# Backend
+cd ../server
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/python3 seed.py   # 25 demo reports
 ```
 
 ### 4. Run locally
-```bash
-# Terminal 1: Next.js frontend
-npm run dev
 
-# Terminal 2: Python backend (FastAPI + Telegram + email)
-.venv/bin/python3 python/main.py
+**Terminal 1: Next.js frontend**
+```bash
+cd client && npm run dev
+```
+
+**Terminal 2: Python backend**
+```bash
+cd server && .venv/bin/python3 main.py
 ```
 
 Open http://localhost:3000
@@ -84,8 +91,8 @@ PYTHON_API_URL        — http://localhost:8000 (or Render URL)
 
 **Frontend:** Push to GitHub → Vercel auto-deploys (free tier).
 
-**Backend:** Connect GitHub to Render.com → select `python/main.py` → free tier.
-Start command: `.venv/bin/uvicorn python.main:app --host 0.0.0.0 --port $PORT`
+**Backend:** Connect GitHub to Render.com → select `server/main.py` → free tier.
+Start command: `.venv/bin/uvicorn main:app --host 0.0.0.0 --port $PORT`
 
 ## Privacy & PHI Compliance
 
