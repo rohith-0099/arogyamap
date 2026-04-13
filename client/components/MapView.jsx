@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import OutbreakBanner from "./OutbreakBanner";
 import { supabase } from "@/lib/supabase";
+import { AlertCircle, Radio } from "lucide-react";
 
 // Urgency → color mapping
 const URGENCY_COLORS = {
@@ -223,8 +224,9 @@ export default function MapView() {
           </div>
         </div>
         {outbreakClusters.length > 0 && (
-          <div className="mt-2 text-xs text-urgency-high font-medium animate-pulse">
-            🚨 {outbreakClusters.length} active cluster(s)
+          <div className="mt-2 flex items-center gap-1.5 text-xs text-urgency-high font-medium animate-pulse">
+            <AlertCircle size={14} fill="currentColor" fillOpacity={0.2} />
+            <span>{outbreakClusters.length} active cluster(s)</span>
           </div>
         )}
       </div>
@@ -253,7 +255,7 @@ export default function MapView() {
           href="/report"
           className="flex items-center gap-2 bg-urgency-high hover:bg-red-700 text-white px-4 py-2 rounded-full font-medium text-sm transition-all shadow-lg shadow-red-900/50"
         >
-          <span className="animate-pulse">🎙️</span>
+          <Radio size={18} className="animate-pulse" />
           Report Symptoms
         </a>
       </div>
