@@ -23,6 +23,7 @@ from acoustic import analyse_audio
 from clinic_finder import find_nearest_clinics, format_clinics_text
 from tts_reply import generate_voice_reply
 from database import insert_report
+from utils.location import resolve_location
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -47,19 +48,7 @@ def _connect_imap() -> imaplib.IMAP4_SSL:
     return mail
 
 
-def _extract_city(text: str) -> Optional[str]:
-    """Try to extract city name from email body."""
-    kerala_cities = [
-        "thiruvananthapuram", "trivandrum", "kochi", "ernakulam", "kozhikode",
-        "calicut", "thrissur", "kannur", "kollam", "palakkad", "malappuram",
-        "kottayam", "alappuzha", "alleppey", "kasargod", "pathanamthitta",
-        "idukki", "wayanad",
-    ]
-    text_lower = text.lower()
-    for city in kerala_cities:
-        if city in text_lower:
-            return city.title()
-    return None
+
 
 
 def _process_message(msg) -> None:
@@ -109,14 +98,15 @@ def _process_message(msg) -> None:
         logger.info("Empty email, skipping")
         return
 
-    city = _extract_city(symptom_text)
+    # Resolve location (hierarchy aware)
+    location = resolve_location(text=symptom_text)
 
     # Build channel input
     channel_input = from_email(
         text=symptom_text,
         audio_bytes=audio_bytes,
         audio_filename=audio_filename,
-        city=city,
+        city=location.get("city"),
         sender_email=sender_email,
     )
 
@@ -142,7 +132,14 @@ def _process_message(msg) -> None:
             symptoms_summary=triage.get("symptoms_summary", "unspecified"),
             urgency=urgency,
             advice=triage.get("advice", ""),
-            city=city,
+            lat=location.get("lat"),
+            lng=location.get("lng"),
+            city=location.get("city") or "",
+            zone_name=location.get("zone_name"),
+            district=location.get("district"),
+            state=location.get("state"),
+            country=location.get("country"),
+            resolution_method=location.get("resolution_method", "unassigned"),
             has_cough=acoustic.get("has_cough", False),
             voice_stress=acoustic.get("voice_stress", 0.0),
             cough_type=acoustic.get("cough_type", "none"),

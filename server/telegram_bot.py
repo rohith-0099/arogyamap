@@ -13,6 +13,8 @@ from telegram.ext import (
     CallbackQueryHandler,
     filters,
     ContextTypes,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
 )
 
 from channel_router import from_telegram
@@ -21,6 +23,7 @@ from acoustic import analyse_audio
 from clinic_finder import find_nearest_clinics, format_clinics_text
 from tts_reply import generate_voice_reply
 from database import insert_report, update_follow_up, mark_follow_up_sent
+from utils.location import resolve_location
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -84,7 +87,14 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/help — Show this message\n\n"
         "_All reports are anonymous. No personal data stored._"
     )
-    await update.message.reply_text(text, parse_mode="Markdown")
+    keyboard = ReplyKeyboardMarkup(
+        [
+            [KeyboardButton("📍 Share My Location", request_location=True)],
+            [KeyboardButton("🗺️ View Disease Map")],
+        ],
+        resize_keyboard=True,
+    )
+    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=keyboard)
 
 
 async def cmd_map(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -105,9 +115,8 @@ async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     loc = update.message.location
     user_id = update.effective_user.id
     _sessions.setdefault(user_id, {})
-    # Round to 500m grid for privacy
-    _sessions[user_id]["lat"] = round(loc.latitude * 200) / 200
-    _sessions[user_id]["lng"] = round(loc.longitude * 200) / 200
+    _sessions[user_id]["lat"] = loc.latitude
+    _sessions[user_id]["lng"] = loc.longitude
     await update.message.reply_text(
         "📍 Location captured. Now send your symptoms as a voice message or text."
     )
@@ -201,6 +210,9 @@ async def _process_and_reply(
         except Exception:
             pass
 
+    # Resolve locations (district, zone, etc.)
+    location = resolve_location(raw_lat=lat, raw_lng=lng, text=triage.get("transcription", ""))
+
     # Save to DB
     try:
         row = insert_report(
@@ -209,8 +221,14 @@ async def _process_and_reply(
             symptoms_summary=triage.get("symptoms_summary", "unspecified"),
             urgency=urgency,
             advice=triage.get("advice", ""),
-            lat=lat,
-            lng=lng,
+            lat=location.get("lat", lat),
+            lng=location.get("lng", lng),
+            city=location.get("city") or "",
+            zone_name=location.get("zone_name"),
+            district=location.get("district"),
+            state=location.get("state"),
+            country=location.get("country"),
+            resolution_method=location.get("resolution_method", "unassigned"),
             has_cough=acoustic.get("has_cough", False),
             voice_stress=acoustic.get("voice_stress", 0.0),
             cough_type=acoustic.get("cough_type", "none"),
@@ -225,6 +243,9 @@ async def _process_and_reply(
 
     # Send text reply
     reply_text = _format_reply(triage, clinics)
+    if not location.get("district"):
+        reply_text += "\n\n⚠️ *Tip:* I couldn't detect your location. Tap '📍 Share My Location' below to help us map your community and find the nearest clinics."
+    
     await update.message.reply_text(reply_text, parse_mode="Markdown")
 
     # Send nearest clinic location pin

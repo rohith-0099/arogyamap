@@ -53,9 +53,7 @@ export default function ReportForm() {
     setLocStatus("loading");
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        // Round to 500m grid for privacy
-        const lat = Math.round(pos.coords.latitude * 200) / 200;
-        const lng = Math.round(pos.coords.longitude * 200) / 200;
+        const { latitude: lat, longitude: lng } = pos.coords;
         setLocation({ lat, lng });
         setLocStatus("granted");
       },

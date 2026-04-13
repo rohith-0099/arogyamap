@@ -155,15 +155,12 @@ def compute_confidence(
 
 def anonymise_location(lat: Optional[float], lng: Optional[float]) -> tuple[Optional[float], Optional[float]]:
     """
-    Round GPS coords to ~500m grid for PHI compliance.
-    Uses 2 decimal places (≈1.1km) then offset to 500m grid.
+    Returns exact GPS coords (rounded to 6 decimal places for precision).
+    Privacy grid snapped to 500m has been disabled per user request.
     """
     if lat is None or lng is None:
         return None, None
-    # Round to nearest 0.005° ≈ 500m
-    lat_anon = round(round(lat / 0.005) * 0.005, 4)
-    lng_anon = round(round(lng / 0.005) * 0.005, 4)
-    return lat_anon, lng_anon
+    return round(float(lat), 6), round(float(lng), 6)
 
 
 def build_user_hash(channel: str, identifier: str = "") -> str:

@@ -4,6 +4,7 @@ Starts background threads: Telegram bot, email poller, outbreak detector.
 """
 
 import asyncio
+from datetime import datetime, timezone, timedelta
 import io
 import json
 import logging
@@ -162,7 +163,15 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:3002",
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -687,17 +696,27 @@ async def dashboard_reports(
 
     # Role scoping
     if role == "asha_worker":
-        if district:
+        if district == "unassigned":
+            query = query.is_("district", "null")
+        elif district:
             query = query.eq("district", district)
+        if zone == "unassigned":
+            query = query.is_("zone_name", "null")
         elif zone:
             query = query.eq("zone_name", zone)
     elif role == "supervisor":
-        if district:
+        if district == "unassigned":
+            query = query.is_("district", "null")
+        elif district:
             query = query.eq("district", district)
     else:
-        if zone:
+        if zone == "unassigned":
+            query = query.is_("zone_name", "null")
+        elif zone:
             query = query.eq("zone_name", zone)
-        if district:
+        if district == "unassigned":
+            query = query.is_("district", "null")
+        elif district:
             query = query.eq("district", district)
 
     # Geographic hierarchy filters

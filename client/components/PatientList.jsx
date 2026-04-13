@@ -106,8 +106,14 @@ export default function PatientList({
   // ── Cascade: clear child when parent changes ────────────────────────────────
   function setCountry(v)  { setSel({ country: v, state: "", district: "", city: "" }); }
   function setState_(v)   { setSel(s => ({ ...s, state: v, district: "", city: "" })); }
-  function setDistrict(v) { setSel(s => ({ ...s, district: v, city: "" })); }
-  function setCity(v)     { setSel(s => ({ ...s, city: v })); }
+  function setDistrict(v) {
+    setSel(s => ({ ...s, district: v, city: "" }));
+    setZoneRequired(false);
+  }
+  function setCity(v) {
+    setSel(s => ({ ...s, city: v }));
+    if (v) setZoneRequired(false);
+  }
 
   // ── Fetch reports ───────────────────────────────────────────────────────────
   const fetchReports = useCallback(async () => {
@@ -124,7 +130,12 @@ export default function PatientList({
       });
 
       // Pass city key first (backend resolves zone/district/state/country from it)
-      if (sel.city)     params.set("city",     sel.city);
+      if (sel.city) {
+        params.set("city", sel.city);
+        const cityInfo = hierarchy.city_meta[sel.city];
+        if (cityInfo?.zone) params.set("zone", cityInfo.zone);
+        else params.set("zone", sel.city);
+      }
       if (sel.district) params.set("district", sel.district);
       if (sel.state)    params.set("state",    sel.state);
       if (sel.country)  params.set("country",  sel.country);
@@ -189,14 +200,17 @@ export default function PatientList({
               label="District"
               value={sel.district}
               onChange={setDistrict}
-              options={availableDistricts}
+              options={["unassigned", ...availableDistricts]}
               placeholder="Select district"
             />
             <PickerSelect
               label="City"
               value={sel.city}
               onChange={setCity}
-              options={availableCities.map(c => ({ value: c.key, label: c.name }))}
+              options={[
+                { value: "unassigned", label: "Unassigned / Missing Location" },
+                ...availableCities.map(c => ({ value: c.key, label: c.name }))
+              ]}
               placeholder={sel.district ? "Select city" : "Select district first"}
               disabled={!sel.district}
             />
@@ -247,11 +261,14 @@ export default function PatientList({
           )}
           {levels.includes("district") && (
             <HierarchySelect label="District" value={sel.district} onChange={setDistrict}
-              options={availableDistricts} placeholder="All districts" />
+              options={["unassigned", ...availableDistricts]} placeholder="All districts" />
           )}
           {levels.includes("city") && (
             <HierarchySelect label="City"     value={sel.city}     onChange={setCity}
-              options={availableCities.map(c => ({ value: c.key, label: c.name }))}
+              options={[
+                { value: "unassigned", label: "Unassigned" },
+                ...availableCities.map(c => ({ value: c.key, label: c.name }))
+              ]}
               placeholder={sel.district ? "All cities" : "Select district first"}
               disabled={!sel.district} />
           )}
@@ -460,7 +477,13 @@ function FilterSelect({ value, onChange, options }) {
 
 function HierarchySelect({ label, value, onChange, options, placeholder, disabled }) {
   // options can be strings or {value, label} objects
-  const normalised = options.map(o => typeof o === "string" ? { value: o, label: o } : o);
+  const normalised = options.map(o => {
+    if (typeof o === "string") {
+      if (o === "unassigned") return { value: "unassigned", label: "Unassigned ⚠️" };
+      return { value: o, label: o };
+    }
+    return o;
+  });
   return (
     <div className="flex items-center gap-1.5">
       <span className="text-xs text-gray-600 whitespace-nowrap">{label}:</span>
@@ -475,7 +498,13 @@ function HierarchySelect({ label, value, onChange, options, placeholder, disable
 }
 
 function PickerSelect({ label, value, onChange, options, placeholder, disabled }) {
-  const normalised = options.map(o => typeof o === "string" ? { value: o, label: o } : o);
+  const normalised = options.map(o => {
+    if (typeof o === "string") {
+      if (o === "unassigned") return { value: "unassigned", label: "Unassigned ⚠️" };
+      return { value: o, label: o };
+    }
+    return o;
+  });
   return (
     <div>
       <label className="block text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1.5">{label}</label>
