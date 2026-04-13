@@ -619,11 +619,17 @@ async def dashboard_reports(
         raise HTTPException(status_code=400, detail="page must be >= 1")
     page_size = min(max(page_size, 1), 100)
 
-    # Role-based scope enforcement
-    if role == "asha_worker" and not zone:
-        raise HTTPException(status_code=400, detail="asha_worker role requires zone param")
-    if role == "supervisor" and not district:
-        raise HTTPException(status_code=400, detail="supervisor role requires district param")
+    # Role-based scope — zone/district are user-selected filters, not hard requirements.
+    # Return a zone_required flag so the frontend can show the zone picker.
+    if role == "asha_worker" and not zone and not district:
+        return {
+            "reports": [],
+            "pagination": {"page": 1, "page_size": page_size, "total": 0, "pages": 1},
+            "stats": {"total": 0, "by_urgency": {"high": 0, "medium": 0, "low": 0}, "outbreak_count": 0},
+            "filters": {"role": role, "zone": zone, "district": district,
+                        "urgency": urgency, "channel": channel, "outbreak_only": outbreak_only, "hours": hours},
+            "zone_required": True,
+        }
 
     # Fetch from DB
     from datetime import timedelta
@@ -720,6 +726,36 @@ async def dashboard_reports(
             "outbreak_only": outbreak_only,
             "hours": hours,
         },
+    }
+
+
+@app.get("/zones")
+async def get_zones():
+    """
+    Return all available districts and zones from the GeoJSON config.
+    Used by the frontend zone/district picker.
+    """
+    import json as _json
+    from utils.location import ZONES_GEOJSON_PATH, CITY_LOOKUP_PATH
+
+    districts: dict[str, list[str]] = {}  # district → [zone_name, ...]
+
+    try:
+        with open(ZONES_GEOJSON_PATH, encoding="utf-8") as f:
+            geojson = _json.load(f)
+        for feat in geojson.get("features", []):
+            props = feat.get("properties", {})
+            d = props.get("district", "Unknown")
+            z = props.get("zone_name", "Unknown")
+            districts.setdefault(d, [])
+            if z not in districts[d]:
+                districts[d].append(z)
+    except FileNotFoundError:
+        pass
+
+    return {
+        "districts": sorted(districts.keys()),
+        "zones_by_district": {k: sorted(v) for k, v in districts.items()},
     }
 
 
