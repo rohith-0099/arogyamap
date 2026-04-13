@@ -1,6 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { 
+  AlertTriangle, 
+  Navigation, 
+  Map as MapIcon, 
+  Globe, 
+  Send, 
+  Mail, 
+  Wind,
+  Check,
+  Clock,
+  Activity
+} from "lucide-react";
 
 const URGENCY_COLORS = { high: "#ff2200", medium: "#ff8800", low: "#00cc66" };
 const URGENCY_PRIORITY = { high: 0, medium: 1, low: 2 };
@@ -167,8 +179,11 @@ export default function Dashboard() {
 
       {/* Outbreak alerts */}
       {outbreaks.length > 0 && (
-        <div className="mb-4 p-4 rounded-xl bg-red-950/50 border border-urgency-high/40">
-          <div className="text-urgency-high font-bold text-sm mb-2">🚨 Active Outbreak Clusters</div>
+        <div className="mb-4 p-4 rounded-xl bg-red-950/50 border border-urgency-high/40 text-urgency-high">
+          <div className="flex items-center gap-2 font-bold text-sm mb-2">
+            <AlertTriangle size={18} fill="currentColor" fillOpacity={0.2} />
+            Active Outbreak Clusters
+          </div>
           {outbreaks.map((c, i) => (
             <div key={i} className="text-gray-300 text-sm">
               {c.count} {c.symptom_category} cases within 2km — {c.area || "Cluster " + (i + 1)}
@@ -202,7 +217,15 @@ export default function Dashboard() {
                 : "bg-dark-700 text-gray-400 hover:text-white"
             }`}
           >
-            {routeMode ? "✓ Route Optimised" : "🗺️ Optimise Route"}
+            {routeMode ? (
+              <span className="flex items-center gap-1.5 font-medium">
+                <Check size={14} /> Route Optimised
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5">
+                <Navigation size={14} /> Optimise Route
+              </span>
+            )}
           </button>
         </div>
       </div>
@@ -249,9 +272,12 @@ export default function Dashboard() {
                       {report.symptoms_summary}
                     </td>
                     <td className="px-4 py-3 text-gray-400 capitalize">
-                      {report.channel === "web" && "🌐"}
-                      {report.channel === "telegram" && "✈️"}
-                      {report.channel === "email" && "📧"} {report.channel}
+                      <div className="flex items-center gap-2">
+                        {report.channel === "web" && <Globe size={14} className="text-blue-400" />}
+                        {report.channel === "telegram" && <Send size={14} className="text-sky-400" />}
+                        {report.channel === "email" && <Mail size={14} className="text-purple-400" />}
+                        <span>{report.channel}</span>
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-gray-400">
                       {report.distance_km ?? dist.toFixed(1)} km
@@ -264,9 +290,10 @@ export default function Dashboard() {
                     </td>
                     <td className="px-4 py-3">
                       {report.has_cough ? (
-                        <span className="text-yellow-400 text-xs">
-                          🫁 {report.cough_type || "yes"}
-                        </span>
+                        <div className="flex items-center gap-1.5 text-yellow-400 text-xs">
+                          <Wind size={12} />
+                          <span>{report.cough_type || "yes"}</span>
+                        </div>
                       ) : (
                         <span className="text-gray-600 text-xs">—</span>
                       )}

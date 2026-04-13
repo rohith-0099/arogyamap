@@ -14,6 +14,16 @@ import {
   Filler,
 } from "chart.js";
 import { Line, Bar } from "react-chartjs-2";
+import { 
+  Globe, 
+  Send, 
+  Mail, 
+  Activity, 
+  AlertCircle, 
+  Files, 
+  Wind,
+  TrendingUp
+} from "lucide-react";
 
 ChartJS.register(
   CategoryScale,
@@ -200,26 +210,38 @@ export default function Analytics() {
       {/* KPI row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         <div className="bg-dark-800 rounded-xl p-4 border border-dark-600">
-          <div className="text-2xl font-bold text-white">{reports.length}</div>
-          <div className="text-gray-400 text-xs">Total Reports</div>
-        </div>
-        <div className="bg-dark-800 rounded-xl p-4 border border-dark-600">
-          <div className="text-2xl font-bold text-urgency-high">
-            {reports.filter((r) => r.urgency === "high").length}
+          <div className="flex justify-between items-start mb-1">
+            <div className="text-2xl font-bold text-white">{reports.length}</div>
+            <Files size={16} className="text-gray-500" />
           </div>
-          <div className="text-gray-400 text-xs">High Urgency</div>
+          <div className="text-gray-400 text-xs text-uppercase font-medium">Total Reports</div>
         </div>
-        <div className="bg-dark-800 rounded-xl p-4 border border-dark-600">
-          <div className="text-2xl font-bold text-yellow-400">
-            {topSymptom?.[0] || "—"}
+        <div className="bg-dark-800 rounded-xl p-4 border border-dark-600 text-urgency-high">
+          <div className="flex justify-between items-start mb-1">
+            <div className="text-2xl font-bold">
+              {reports.filter((r) => r.urgency === "high").length}
+            </div>
+            <AlertCircle size={16} />
           </div>
-          <div className="text-gray-400 text-xs">Top Symptom</div>
+          <div className="text-gray-400 text-xs text-uppercase font-medium">High Urgency</div>
         </div>
-        <div className="bg-dark-800 rounded-xl p-4 border border-dark-600">
-          <div className="text-2xl font-bold text-purple-400">
-            {reports.filter((r) => r.has_cough).length}
+        <div className="bg-dark-800 rounded-xl p-4 border border-dark-600 text-yellow-400">
+          <div className="flex justify-between items-start mb-1">
+            <div className="text-2xl font-bold">
+              {topSymptom?.[0] || "—"}
+            </div>
+            <Activity size={16} />
           </div>
-          <div className="text-gray-400 text-xs">Cough Detected</div>
+          <div className="text-gray-400 text-xs text-uppercase font-medium">Top Symptom</div>
+        </div>
+        <div className="bg-dark-800 rounded-xl p-4 border border-dark-600 text-purple-400">
+          <div className="flex justify-between items-start mb-1">
+            <div className="text-2xl font-bold">
+              {reports.filter((r) => r.has_cough).length}
+            </div>
+            <Wind size={16} />
+          </div>
+          <div className="text-gray-400 text-xs text-uppercase font-medium">Cough Detected</div>
         </div>
       </div>
 
@@ -263,8 +285,10 @@ export default function Analytics() {
             const pct = reports.length > 0 ? Math.round((count / reports.length) * 100) : 0;
             return (
               <div key={ch} className="flex-1 text-center">
-                <div className="text-3xl mb-1">
-                  {ch === "web" ? "🌐" : ch === "telegram" ? "✈️" : "📧"}
+                <div className="flex justify-center mb-2">
+                  {ch === "web" ? <Globe size={28} className="text-blue-400" /> : 
+                   ch === "telegram" ? <Send size={28} className="text-sky-400" /> : 
+                   <Mail size={28} className="text-purple-400" />}
                 </div>
                 <div className="text-xl font-bold text-white">{count}</div>
                 <div className="text-gray-400 text-xs capitalize">{ch}</div>
