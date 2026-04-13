@@ -7,6 +7,9 @@ CREATE TABLE IF NOT EXISTS reports (
   lat             FLOAT,
   lng             FLOAT,
   city            TEXT,
+  zone_name       TEXT,
+  district        TEXT,
+  resolution_method TEXT DEFAULT 'unassigned',
   symptoms_raw    TEXT,
   symptoms_summary TEXT NOT NULL,
   urgency         TEXT NOT NULL CHECK (urgency IN ('low', 'medium', 'high')),
@@ -28,6 +31,8 @@ CREATE INDEX IF NOT EXISTS idx_reports_timestamp ON reports (timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_reports_urgency ON reports (urgency);
 CREATE INDEX IF NOT EXISTS idx_reports_outbreak ON reports (outbreak_flag) WHERE outbreak_flag = true;
 CREATE INDEX IF NOT EXISTS idx_reports_lat_lng ON reports (lat, lng) WHERE lat IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_reports_zone ON reports (zone_name) WHERE zone_name IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_reports_district ON reports (district) WHERE district IS NOT NULL;
 
 -- Enable Row Level Security
 ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
