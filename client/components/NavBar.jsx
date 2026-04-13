@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Map, Mic, LayoutDashboard, BarChart3 } from "lucide-react";
 
 const navItems = [
-  { href: "/", label: "Live Map", icon: "🗺️" },
-  { href: "/report", label: "Report", icon: "🎙️" },
-  { href: "/dashboard", label: "Dashboard", icon: "🏥" },
-  { href: "/analytics", label: "Analytics", icon: "📊" },
+  { href: "/", label: "Live Map", icon: Map },
+  { href: "/report", label: "Report", icon: Mic },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
 ];
 
 export default function NavBar() {
@@ -18,7 +19,7 @@ export default function NavBar() {
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
         {/* Brand */}
         <Link href="/" className="flex items-center gap-2 font-bold text-lg">
-          <span className="text-urgency-high">●</span>
+          <div className="w-2.5 h-2.5 rounded-full bg-urgency-high animate-pulse" />
           <span className="text-white">ArogyaMap</span>
           <span className="text-xs text-gray-400 hidden sm:inline font-normal">
             Disease Intelligence
@@ -27,7 +28,7 @@ export default function NavBar() {
 
         {/* Nav links */}
         <div className="flex items-center gap-1">
-          {navItems.map(({ href, label, icon }) => {
+          {navItems.map(({ href, label, icon: Icon }) => {
             const active = pathname === href;
             return (
               <Link
@@ -39,7 +40,7 @@ export default function NavBar() {
                     : "text-gray-400 hover:text-white hover:bg-dark-600"
                 }`}
               >
-                <span>{icon}</span>
+                <Icon size={16} strokeWidth={active ? 2.5 : 2} />
                 <span className="hidden sm:inline">{label}</span>
               </Link>
             );
