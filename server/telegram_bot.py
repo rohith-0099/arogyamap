@@ -4,8 +4,17 @@ import asyncio
 import logging
 import os
 from datetime import datetime, timedelta, timezone
+from dotenv import load_dotenv
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+load_dotenv()
+
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ReplyKeyboardMarkup,
+    KeyboardButton,
+)
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -13,8 +22,6 @@ from telegram.ext import (
     CallbackQueryHandler,
     filters,
     ContextTypes,
-    ReplyKeyboardMarkup,
-    KeyboardButton,
 )
 
 from channel_router import from_telegram
