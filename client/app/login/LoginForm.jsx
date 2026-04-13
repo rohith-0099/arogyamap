@@ -1,13 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { Lock, Mail, AlertCircle, Loader2 } from "lucide-react";
 
 export default function LoginForm() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -40,11 +38,11 @@ export default function LoginForm() {
       // Role-based redirect
       const role = profile?.role;
       if (role === "asha_worker") {
-        router.push("/dashboard");
+        window.location.href = "/dashboard";
       } else if (role === "admin") {
-        router.push("/analytics");
+        window.location.href = "/analytics";
       } else {
-        router.push("/");
+        window.location.href = "/";
       }
     } catch (err) {
       setError(err.message);
