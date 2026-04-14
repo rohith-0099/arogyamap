@@ -164,3 +164,5 @@ explain.md
 # Seed data (local only, not for deployment)
 server/seed.py
 server/seed_india_live.py
+arogyamap-api/
+README.main.bak
