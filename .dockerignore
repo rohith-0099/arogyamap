@@ -1,0 +1,17 @@
+client/
+node_modules/
+.next/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.git/
+.github/
+.vercel/
+graphify-out/
+.claude/
+*.md
+!README.md
+.env
+.env.local
+.env.local.example
