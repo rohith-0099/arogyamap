@@ -1,8 +1,31 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
+// Non-core reports are auto-removed from the map after a retention window.
+// Outbreak-flagged and high-urgency reports are always kept.
+const RETENTION_DAYS = { low: 2, medium: 7 };
+
+async function pruneNonCoreReports() {
+  const now = Date.now();
+  for (const [urgency, days] of Object.entries(RETENTION_DAYS)) {
+    const cutoff = new Date(now - days * 24 * 60 * 60 * 1000).toISOString();
+    const { error } = await supabaseAdmin
+      .from("reports")
+      .delete()
+      .eq("urgency", urgency)
+      .eq("outbreak_flag", false)
+      .lt("timestamp", cutoff);
+    if (error) console.error(`prune ${urgency} failed:`, error.message);
+  }
+}
+
 export async function GET() {
   try {
+    // Lazy auto-cleanup on every dashboard poll (cheap, indexed filter).
+    pruneNonCoreReports().catch(() => {});
+
     const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
 
     const { data, error } = await supabaseAdmin

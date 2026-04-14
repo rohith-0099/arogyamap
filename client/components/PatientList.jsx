@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Globe, Send, Mail, AlertTriangle, Search, RefreshCw,
   ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
-  X, MapPin, Activity, Clock, Shield, User,
+  X, MapPin, Activity, Clock, Shield, User, Trash2,
 } from "lucide-react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -388,7 +388,17 @@ export default function PatientList({
         )}
       </div>
 
-      {drawer && <DetailDrawer r={drawer} role={role} onClose={() => setDrawer(null)} />}
+      {drawer && (
+        <DetailDrawer
+          r={drawer}
+          role={role}
+          onClose={() => setDrawer(null)}
+          onDeleted={(id) => {
+            setReports(prev => prev.filter(r => r.id !== id));
+            setDrawer(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -536,7 +546,29 @@ function fmtTime(ts) {
 
 // ── Detail Drawer ─────────────────────────────────────────────────────────────
 
-function DetailDrawer({ r, role, onClose }) {
+function DetailDrawer({ r, role, onClose, onDeleted }) {
+  const [deleting, setDeleting] = useState(false);
+  const [delError, setDelError] = useState(null);
+  const canDelete = role === "admin" || role === "supervisor";
+
+  async function handleDelete() {
+    if (!canDelete) return;
+    const ok = window.confirm(
+      `Remove report #${r.id} from the map?\n\nUse this for fake or duplicate reports. This cannot be undone.`
+    );
+    if (!ok) return;
+    setDeleting(true);
+    setDelError(null);
+    try {
+      const res = await fetch(`/api/reports/${r.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      onDeleted?.(r.id);
+    } catch (err) {
+      setDelError(err.message);
+      setDeleting(false);
+    }
+  }
+
   return (
     <>
       <div onClick={onClose} className="fixed inset-0 bg-black/60 z-50" />
@@ -553,10 +585,27 @@ function DetailDrawer({ r, role, onClose }) {
               )}
             </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-dark-600 text-gray-400 hover:text-white transition-colors">
-            <X size={18} />
-          </button>
+          <div className="flex items-center gap-1">
+            {canDelete && (
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                title="Remove report from map (mark as fake)"
+                className="p-2 rounded-lg hover:bg-red-500/15 text-gray-400 hover:text-red-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Trash2 size={17} />
+              </button>
+            )}
+            <button onClick={onClose} className="p-2 rounded-lg hover:bg-dark-600 text-gray-400 hover:text-white transition-colors">
+              <X size={18} />
+            </button>
+          </div>
         </div>
+        {delError && (
+          <div className="mx-5 mt-4 flex items-center gap-2 p-2.5 bg-red-950/50 border border-red-500/30 rounded-lg text-red-400 text-xs">
+            <AlertTriangle size={13} />{delError}
+          </div>
+        )}
 
         <div className="p-5 space-y-5">
           <DrawerSection title="Symptoms">
