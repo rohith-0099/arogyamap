@@ -1,17 +1,20 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { 
-  AlertTriangle, 
-  Navigation, 
-  Map as MapIcon, 
-  Globe, 
-  Send, 
-  Mail, 
+import {
+  AlertTriangle,
+  Navigation,
+  Map as MapIcon,
+  Globe,
+  Send,
+  Mail,
   Wind,
   Check,
   Clock,
-  Activity
+  Activity,
+  MapPin,
+  Trash2,
+  RefreshCw,
 } from "lucide-react";
 
 const URGENCY_COLORS = { high: "#ff2200", medium: "#ff8800", low: "#00cc66" };
@@ -83,6 +86,24 @@ export default function Dashboard() {
   const [workerLat, setWorkerLat] = useState(10.8505);
   const [workerLng, setWorkerLng] = useState(76.2711);
   const [outbreaks, setOutbreaks] = useState([]);
+  const [deletingId, setDeletingId] = useState(null);
+
+  async function deleteReport(id) {
+    const ok = window.confirm(
+      `Remove report #${id} from the map?\n\nUse this for fake or duplicate reports. This cannot be undone.`
+    );
+    if (!ok) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/reports/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      setReports(prev => prev.filter(r => r.id !== id));
+    } catch (err) {
+      alert(`Delete failed: ${err.message}`);
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   useEffect(() => {
     async function load() {
@@ -240,10 +261,12 @@ export default function Dashboard() {
                 <th className="px-4 py-3 text-left">Urgency</th>
                 <th className="px-4 py-3 text-left">Symptoms</th>
                 <th className="px-4 py-3 text-left">Channel</th>
+                <th className="px-4 py-3 text-left">Location</th>
                 <th className="px-4 py-3 text-left">Distance</th>
                 <th className="px-4 py-3 text-left">Time</th>
                 <th className="px-4 py-3 text-left">Cough</th>
                 <th className="px-4 py-3 text-left">Status</th>
+                <th className="px-4 py-3 text-left">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -277,6 +300,12 @@ export default function Dashboard() {
                         {report.channel === "telegram" && <Send size={14} className="text-sky-400" />}
                         {report.channel === "email" && <Mail size={14} className="text-purple-400" />}
                         <span>{report.channel}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-300">
+                      <div className="flex items-center gap-1.5">
+                        <MapPin size={12} className="text-gray-500" />
+                        <span className="capitalize">{report.city || "Unknown"}</span>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-gray-400">
@@ -314,6 +343,18 @@ export default function Dashboard() {
                       ) : (
                         <span className="text-gray-600 text-xs">pending</span>
                       )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => deleteReport(report.id)}
+                        disabled={deletingId === report.id}
+                        title="Remove from map (fake / duplicate)"
+                        className="p-1.5 rounded-md text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        {deletingId === report.id
+                          ? <RefreshCw size={13} className="animate-spin" />
+                          : <Trash2 size={13} />}
+                      </button>
                     </td>
                   </tr>
                 );
