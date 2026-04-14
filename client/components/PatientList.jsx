@@ -90,6 +90,28 @@ export default function PatientList({
   // Drawer
   const [drawer, setDrawer] = useState(null);
 
+  // Row delete state
+  const [deletingId, setDeletingId] = useState(null);
+
+  async function deleteReport(id, e) {
+    if (e) e.stopPropagation();
+    const ok = window.confirm(
+      `Remove report #${id} from the map?\n\nUse this for fake or duplicate reports. This cannot be undone.`
+    );
+    if (!ok) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/reports/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      setReports(prev => prev.filter(r => r.id !== id));
+      setDrawer(d => (d && d.id === id ? null : d));
+    } catch (err) {
+      alert(`Delete failed: ${err.message}`);
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   // ── Load hierarchy on mount ─────────────────────────────────────────────────
   useEffect(() => {
     fetch(`${PYTHON_API}/hierarchy`)
@@ -334,6 +356,7 @@ export default function PatientList({
                 {role !== "asha_worker" && <Th>Worker</Th>}
                 <Th>Status</Th>
                 <Th>OB</Th>
+                <Th>Action</Th>
               </tr>
             </thead>
             <tbody className="divide-y divide-dark-700">
@@ -369,6 +392,18 @@ export default function PatientList({
                   <td className="px-4 py-3"><StatusBadge s={r.follow_up_status} /></td>
                   <td className="px-4 py-3 text-center">
                     {r.outbreak_flag && <AlertTriangle size={13} className="text-orange-400 inline" />}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <button
+                      onClick={(e) => deleteReport(r.id, e)}
+                      disabled={deletingId === r.id}
+                      title="Remove from map (fake / duplicate)"
+                      className="p-1.5 rounded-md text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      {deletingId === r.id
+                        ? <RefreshCw size={13} className="animate-spin" />
+                        : <Trash2 size={13} />}
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -549,10 +584,8 @@ function fmtTime(ts) {
 function DetailDrawer({ r, role, onClose, onDeleted }) {
   const [deleting, setDeleting] = useState(false);
   const [delError, setDelError] = useState(null);
-  const canDelete = role === "admin" || role === "supervisor";
 
   async function handleDelete() {
-    if (!canDelete) return;
     const ok = window.confirm(
       `Remove report #${r.id} from the map?\n\nUse this for fake or duplicate reports. This cannot be undone.`
     );
@@ -586,16 +619,14 @@ function DetailDrawer({ r, role, onClose, onDeleted }) {
             </div>
           </div>
           <div className="flex items-center gap-1">
-            {canDelete && (
-              <button
-                onClick={handleDelete}
-                disabled={deleting}
-                title="Remove report from map (mark as fake)"
-                className="p-2 rounded-lg hover:bg-red-500/15 text-gray-400 hover:text-red-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <Trash2 size={17} />
-              </button>
-            )}
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              title="Remove report from map (mark as fake)"
+              className="p-2 rounded-lg hover:bg-red-500/15 text-gray-400 hover:text-red-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Trash2 size={17} />
+            </button>
             <button onClick={onClose} className="p-2 rounded-lg hover:bg-dark-600 text-gray-400 hover:text-white transition-colors">
               <X size={18} />
             </button>
