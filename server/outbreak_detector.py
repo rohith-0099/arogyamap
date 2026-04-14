@@ -5,11 +5,26 @@ import os
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-import numpy as np
-from sklearn.neighbors import BallTree
-
-# Lazy imports
+# Lazy imports — numpy/sklearn/prophet are heavy; keep boot RAM low on free tiers
+_np = None
+_BallTree = None
 _prophet = None
+
+
+def _get_np():
+    global _np
+    if _np is None:
+        import numpy as np
+        _np = np
+    return _np
+
+
+def _get_balltree():
+    global _BallTree
+    if _BallTree is None:
+        from sklearn.neighbors import BallTree
+        _BallTree = BallTree
+    return _BallTree
 
 
 def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -43,6 +58,9 @@ def detect_clusters(reports: list[dict], radius_km: float = 2.0, min_count: int 
             continue
         sym = (r.get("symptoms_summary") or "unknown").lower()
         by_symptom.setdefault(sym, []).append(r)
+
+    np = _get_np()
+    BallTree = _get_balltree()
 
     for symptom, sym_reports in by_symptom.items():
         if len(sym_reports) < min_count:

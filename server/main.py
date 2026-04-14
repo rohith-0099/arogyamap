@@ -73,8 +73,12 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("ArogyaMap Python backend starting…")
 
-    # Outbreak check every 15 minutes
-    scheduler.add_job(_outbreak_job, "interval", minutes=15, id="outbreak")
+    # Outbreak check every 15 minutes (loads sklearn/numpy on first run — gate it
+    # to keep free-tier boot lean; ENABLE_OUTBREAK=1 to turn on)
+    if os.getenv("ENABLE_OUTBREAK", "").lower() in ("1", "true", "yes"):
+        scheduler.add_job(_outbreak_job, "interval", minutes=15, id="outbreak")
+    else:
+        logger.info("Outbreak scheduler disabled (set ENABLE_OUTBREAK=1 to enable)")
 
     # Weekly bulletin every Sunday at midnight
     scheduler.add_job(
@@ -95,11 +99,17 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Location preload failed (non-fatal): {e}")
 
-    # Start Telegram bot in background thread
-    _start_telegram_thread()
+    # Background channels are RAM-heavy; gate them so small hosts (Render free
+    # tier, 512 MB) don't OOM. Set ENABLE_TELEGRAM=1 / ENABLE_EMAIL=1 to turn on.
+    if os.getenv("ENABLE_TELEGRAM", "").lower() in ("1", "true", "yes"):
+        _start_telegram_thread()
+    else:
+        logger.info("Telegram bot disabled (set ENABLE_TELEGRAM=1 to enable)")
 
-    # Start email poller in background thread
-    _start_email_thread()
+    if os.getenv("ENABLE_EMAIL", "").lower() in ("1", "true", "yes"):
+        _start_email_thread()
+    else:
+        logger.info("Email poller disabled (set ENABLE_EMAIL=1 to enable)")
 
     yield
 
