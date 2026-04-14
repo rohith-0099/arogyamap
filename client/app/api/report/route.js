@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-const PYTHON_API_URL = process.env.PYTHON_API_URL || "http://localhost:8000";
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+const PYTHON_API_URL =
+  process.env.PYTHON_API_URL ||
+  process.env.NEXT_PUBLIC_PYTHON_API_URL ||
+  process.env.NEXT_PUBLIC_PY_API_URL ||
+  "http://localhost:8000";
 
 export async function POST(request) {
   try {
