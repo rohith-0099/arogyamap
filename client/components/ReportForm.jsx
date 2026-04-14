@@ -132,12 +132,24 @@ export default function ReportForm() {
       }
       formData.append("channel", "web");
 
-      const res = await fetch("/api/report", {
+      // Call HF backend directly — Vercel's 10s serverless timeout would kill
+      // the /api/report proxy before /process finishes (Groq STT + triage + TTS
+      // can take 15-30s on a cold container). CORS is already allowed for
+      // *.vercel.app on the backend.
+      const PY_API =
+        process.env.NEXT_PUBLIC_PYTHON_API_URL ||
+        process.env.NEXT_PUBLIC_PY_API_URL ||
+        "";
+      const endpoint = PY_API
+        ? `${PY_API.replace(/\/$/, "")}/process`
+        : "/api/report";
+
+      const res = await fetch(endpoint, {
         method: "POST",
         body: formData,
       });
 
-      if (!res.ok) throw new Error("Server error");
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
       const data = await res.json();
       setResult(data);
     } catch (err) {
