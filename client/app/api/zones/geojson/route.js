@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 const PY_API = process.env.NEXT_PUBLIC_PY_API_URL || "http://localhost:8000";
 
 export async function GET() {
