@@ -87,6 +87,7 @@ export default function Dashboard() {
   const [workerLng, setWorkerLng] = useState(76.2711);
   const [outbreaks, setOutbreaks] = useState([]);
   const [deletingId, setDeletingId] = useState(null);
+  const [cityFilter, setCityFilter] = useState("");
 
   async function deleteReport(id) {
     const ok = window.confirm(
@@ -132,7 +133,17 @@ export default function Dashboard() {
     load();
   }, []);
 
-  const sorted = [...reports].sort((a, b) => {
+  // Unique city list (sorted) for the dropdown
+  const cityOptions = Array.from(
+    new Set(reports.map(r => (r.city || "").trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+
+  // Apply city filter before sort/route optimisation
+  const filtered = cityFilter
+    ? reports.filter(r => (r.city || "").toLowerCase() === cityFilter.toLowerCase())
+    : reports;
+
+  const sorted = [...filtered].sort((a, b) => {
     if (sortBy === "urgency") return URGENCY_PRIORITY[a.urgency] - URGENCY_PRIORITY[b.urgency];
     if (sortBy === "time") return new Date(b.timestamp) - new Date(a.timestamp);
     if (sortBy === "distance") {
@@ -150,15 +161,15 @@ export default function Dashboard() {
   const sparkData = (() => {
     const counts = new Array(7).fill(0);
     const now = Date.now();
-    reports.forEach((r) => {
+    filtered.forEach((r) => {
       const daysAgo = Math.floor((now - new Date(r.timestamp)) / 86400000);
       if (daysAgo < 7) counts[6 - daysAgo]++;
     });
     return counts;
   })();
 
-  const highCount = reports.filter((r) => r.urgency === "high").length;
-  const medCount = reports.filter((r) => r.urgency === "medium").length;
+  const highCount = filtered.filter((r) => r.urgency === "high").length;
+  const medCount = filtered.filter((r) => r.urgency === "medium").length;
 
   if (loading) {
     return (
@@ -178,8 +189,8 @@ export default function Dashboard() {
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         <div className="bg-dark-800 rounded-xl p-4 border border-dark-600">
-          <div className="text-2xl font-bold text-white">{reports.length}</div>
-          <div className="text-gray-400 text-xs">Reports (48h)</div>
+          <div className="text-2xl font-bold text-white">{filtered.length}</div>
+          <div className="text-gray-400 text-xs">Reports (48h){cityFilter ? ` • ${cityFilter}` : ""}</div>
           <Sparkline data={sparkData} color="#888" />
         </div>
         <div className="bg-dark-800 rounded-xl p-4 border border-red-900/40">
@@ -229,6 +240,24 @@ export default function Dashboard() {
             {opt}
           </button>
         ))}
+        <select
+          value={cityFilter}
+          onChange={(e) => setCityFilter(e.target.value)}
+          className="px-3 py-1 rounded-lg text-sm bg-dark-700 text-gray-200 border border-dark-600 focus:outline-none focus:border-gray-500"
+        >
+          <option value="">All cities ({reports.length})</option>
+          {cityOptions.map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+        {cityFilter && (
+          <button
+            onClick={() => setCityFilter("")}
+            className="px-2 py-1 rounded-lg text-xs bg-dark-700 text-gray-400 hover:text-white"
+          >
+            Clear
+          </button>
+        )}
         <div className="ml-auto">
           <button
             onClick={() => setRouteMode(!routeMode)}
