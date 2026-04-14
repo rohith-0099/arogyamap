@@ -160,3 +160,7 @@ Thumbs.dbCLAUDE.md
 CLAUDE.md
 explain.md
 .claude/
+
+# Seed data (local only, not for deployment)
+server/seed.py
+server/seed_india_live.py
