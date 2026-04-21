@@ -98,7 +98,7 @@ export default function NavBar() {
               <Link
                 key={href}
                 href={href}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all relative ${
                   active
                     ? "bg-urgency-high/20 text-urgency-high border border-urgency-high/30"
                     : "text-gray-400 hover:text-white hover:bg-dark-600"
