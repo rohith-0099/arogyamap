@@ -106,6 +106,16 @@ export default function NavBar() {
               >
                 <Icon size={16} strokeWidth={active ? 2.5 : 2} />
                 <span className="hidden sm:inline">{label}</span>
+                
+                {/* Outbreak Indicator for Live Map */}
+                {href === "/" && hasOutbreak && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-dark-800 animate-bounce" />
+                )}
+                
+                {/* Forecast Alert Indicator for Analytics */}
+                {href === "/analytics" && hasForecastAlert && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-purple-500 rounded-full border-2 border-dark-800 animate-pulse" />
+                )}
               </Link>
             );
           })}
