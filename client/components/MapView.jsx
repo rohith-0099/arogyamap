@@ -376,7 +376,25 @@ export default function MapView() {
           outbreakClusters.length > 0 ? "top-20" : "top-4"
         }`}
       >
-        <div className="text-gray-400 text-xs mb-2 font-medium">LAST 48H</div>
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-gray-400 text-xs font-medium uppercase tracking-wider">LIVE INTEL</div>
+          <div className="flex gap-1">
+            <button 
+              onClick={() => setShowClinics(!showClinics)}
+              className={`p-1.5 rounded-lg transition-all ${showClinics ? "bg-blue-500/20 text-blue-400" : "hover:bg-dark-700 text-gray-500"}`}
+              title="Toggle Clinics"
+            >
+              <Hospital size={16} />
+            </button>
+            <button 
+              onClick={() => setShowHotspots(!showHotspots)}
+              className={`p-1.5 rounded-lg transition-all ${showHotspots ? "bg-purple-500/20 text-purple-400" : "hover:bg-dark-700 text-gray-500"}`}
+              title="Toggle Hotspots"
+            >
+              <TrendingUp size={16} />
+            </button>
+          </div>
+        </div>
         <div className="flex gap-3">
           <div className="text-center">
             <div className="text-white font-bold text-lg">{stats.total}</div>
