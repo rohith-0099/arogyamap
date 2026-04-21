@@ -116,9 +116,15 @@ def detect_clusters(reports: list[dict], radius_km: float = 2.0, min_count: int 
                     
                     print(f"[outbreak] Cluster found: {symptom}, {len(cluster_reports)} reports near {area}")
                     
+                    # Calculate Risk Score: high urgency reports weighted more
+                    high_count = sum(1 for r in cluster_reports if r.get("urgency") == "high")
+                    risk_score = len(component) + (high_count * 2)
+
                     clusters.append({
                         "symptom_category": symptom,
                         "count": len(cluster_reports),
+                        "high_count": high_count,
+                        "risk_score": risk_score,
                         "lat": lat_c,
                         "lng": lng_c,
                         "area": area,
