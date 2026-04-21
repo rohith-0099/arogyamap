@@ -912,6 +912,20 @@ async def get_zones_geojson():
     except FileNotFoundError:
         return {"type": "FeatureCollection", "features": []}
 
+@app.get("/analytics/forecast")
+@limiter.limit("5/minute")
+async def get_forecast(request: Request, district: Optional[str] = None):
+    """Return Prophet-based outbreak forecast for a district."""
+    from outbreak_detector import prophet_forecast
+    return prophet_forecast(district=district)
+
+
+@app.get("/clinics/search")
+@limiter.limit("10/minute")
+async def search_clinics(request: Request, lat: float, lng: float, radius: int = 10000):
+    """Proxy for clinic finder (Overpass API)."""
+    return {"clinics": find_nearest_clinics(lat, lng, radius_m=radius, limit=10)}
+
 
 if __name__ == "__main__":
     import uvicorn
