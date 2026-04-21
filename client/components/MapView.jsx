@@ -103,9 +103,69 @@ function MapInner({ reports, outbreakClusters, theme, clinics, hotspots, showCli
               weight: 2,
               dashArray: "8 6",
             }}
-          />
+          >
+            <Tooltip direction="top" offset={[0, -20]} opacity={0.9}>
+              <div className="text-xs">
+                <div className="font-bold text-urgency-high uppercase">Active Outbreak Cluster</div>
+                <div className="text-gray-300 mt-0.5">{cluster.count} reports · Risk Score: {cluster.risk_score}</div>
+                <div className="text-gray-400 text-[10px]">{cluster.symptom_category}</div>
+              </div>
+            </Tooltip>
+          </CircleMarker>
         ) : null
       )}
+
+      {/* Predictive Hotspots */}
+      {showHotspots && hotspots.map((spot, i) => (
+        <CircleMarker
+          key={`hotspot-${i}`}
+          center={[spot.lat, spot.lng]}
+          radius={45}
+          pathOptions={{
+            color: "#9966ff",
+            fillColor: "#9966ff",
+            fillOpacity: 0.1,
+            weight: 2,
+            dashArray: "5 5",
+          }}
+          className="animate-pulse"
+        >
+          <Tooltip direction="top" offset={[0, -20]} opacity={0.9}>
+            <div className="text-xs">
+              <div className="font-bold text-purple-400 uppercase">Predicted Hotspot (48h)</div>
+              <div className="text-gray-300 mt-0.5">High probability of surge</div>
+              <div className="text-gray-400 text-[10px]">{spot.district}</div>
+            </div>
+          </Tooltip>
+        </CircleMarker>
+      ))}
+
+      {/* Clinics & Pharmacies */}
+      {showClinics && clinics.map((c, i) => (
+        <CircleMarker
+          key={`clinic-${i}`}
+          center={[c.lat, c.lng]}
+          radius={6}
+          pathOptions={{
+            color: c.type === "hospital" ? "#0099ff" : "#00cc66",
+            fillColor: "#ffffff",
+            fillOpacity: 1,
+            weight: 2,
+          }}
+        >
+          <Tooltip direction="top" offset={[0, -10]} opacity={0.95}>
+            <div className="text-xs">
+              <div className="font-bold text-white flex items-center gap-1.5">
+                {c.type === "hospital" ? <Hospital size={12} className="text-blue-400" /> : <Pill size={12} className="text-green-400" />}
+                {c.name}
+              </div>
+              <div className="text-gray-400 capitalize">{c.type}</div>
+              {c.address && <div className="text-gray-500 mt-1 border-t border-gray-700 pt-1">{c.address}</div>}
+              {c.phone && <div className="text-gray-500">{c.phone}</div>}
+            </div>
+          </Tooltip>
+        </CircleMarker>
+      ))}
 
       {/* Report dots */}
       {reports.map((report) => {
