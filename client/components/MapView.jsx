@@ -437,6 +437,24 @@ export default function MapView() {
           <div className="w-3 h-3 rounded-full border-2 border-urgency-high border-dashed" />
           <span className="text-gray-300">Outbreak</span>
         </div>
+        {showHotspots && (
+          <div className="flex items-center gap-2 mt-1">
+            <div className="w-3 h-3 rounded-full border-2 border-purple-500 border-dotted" />
+            <span className="text-gray-300 text-[10px]">Predicted</span>
+          </div>
+        )}
+        {showClinics && (
+          <div className="mt-2 space-y-1">
+             <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-blue-500" />
+                <span className="text-gray-300 text-[10px]">Hospital</span>
+             </div>
+             <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-green-500" />
+                <span className="text-gray-300 text-[10px]">Pharmacy</span>
+             </div>
+          </div>
+        )}
       </div>
 
       {/* Report CTA */}
