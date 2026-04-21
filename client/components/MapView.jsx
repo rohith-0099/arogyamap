@@ -26,15 +26,21 @@ const BLANK_TILE =
 const CARTO_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
-function MapInner({ reports, outbreakClusters, theme }) {
+function MapInner({ reports, outbreakClusters, theme, clinics, hotspots, showClinics, showHotspots }) {
   const {
     MapContainer,
     TileLayer,
     CircleMarker,
+    Marker,
     Tooltip,
     ZoomControl,
     useMap,
+    L,
   } = require("react-leaflet");
+
+  // Fix for default marker icons in Leaflet when using Next.js/Webpack
+  const iconHospital = typeof window !== "undefined" ? require("lucide-react").Hospital : null;
+  const iconPharmacy = typeof window !== "undefined" ? require("lucide-react").Pill : null;
 
   // Force Leaflet to recompute its size + refetch any skipped tiles
   // once the parent layout has finished painting.
