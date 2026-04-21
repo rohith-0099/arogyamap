@@ -61,6 +61,23 @@ export default function NavBar() {
     router.push("/login");
   };
 
+  const [hasOutbreak, setHasOutbreak] = useState(false);
+  const [hasForecastAlert, setHasForecastAlert] = useState(false);
+
+  useEffect(() => {
+    async function checkAlerts() {
+      try {
+        const res = await fetch("/api/outbreak?forecast=true");
+        const data = await res.json();
+        setHasOutbreak(data.clusters?.length > 0);
+        setHasForecastAlert(data.forecast?.pre_alert);
+      } catch (err) {}
+    }
+    checkAlerts();
+    const iv = setInterval(checkAlerts, 600000); // 10 min
+    return () => clearInterval(iv);
+  }, []);
+
   return (
     <nav className="fixed top-0 left-0 right-0 z-[9999] bg-dark-800/95 backdrop-blur border-b border-dark-600">
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
