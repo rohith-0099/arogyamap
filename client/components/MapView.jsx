@@ -481,6 +481,10 @@ export default function MapView() {
         <DynamicMap
           reports={reports}
           outbreakClusters={outbreakClusters}
+          clinics={clinics}
+          hotspots={hotspots}
+          showClinics={showClinics}
+          showHotspots={showHotspots}
           theme={theme}
         />
       )}
