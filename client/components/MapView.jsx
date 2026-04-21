@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import OutbreakBanner from "./OutbreakBanner";
 import { supabase } from "@/lib/supabase";
-import { AlertCircle, Radio } from "lucide-react";
+import { AlertCircle, Radio, Hospital, Pill, Activity, TrendingUp, Layers } from "lucide-react";
 
 // Urgency → neon color mapping
 const URGENCY_COLORS = {
