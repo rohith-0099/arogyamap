@@ -50,9 +50,15 @@ function detectClusters(reports) {
         // Centroid
         const lat = cluster.reduce((s, r) => s + r.lat, 0) / cluster.length;
         const lng = cluster.reduce((s, r) => s + r.lng, 0) / cluster.length;
+        
+        const highCount = cluster.filter(r => r.urgency === "high").length;
+        const riskScore = cluster.length + (highCount * 2);
+
         clusters.push({
           symptom_category: symptom,
           count: cluster.length,
+          highCount,
+          riskScore,
           lat,
           lng,
           area: cluster[0].city || null,
