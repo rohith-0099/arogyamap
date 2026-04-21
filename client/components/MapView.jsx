@@ -234,10 +234,16 @@ function MapInner({ reports, outbreakClusters, theme, clinics, hotspots, showCli
 export default function MapView() {
   const [reports, setReports] = useState([]);
   const [outbreakClusters, setOutbreakClusters] = useState([]);
+  const [clinics, setClinics] = useState([]);
+  const [hotspots, setHotspots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ total: 0, high: 0, medium: 0, low: 0 });
   const [MapReady, setMapReady] = useState(false);
   const [theme, setTheme] = useState("dark");
+  
+  const [showClinics, setShowClinics] = useState(false);
+  const [showHotspots, setShowHotspots] = useState(false);
+  const [activeDistrict, setActiveDistrict] = useState(null);
 
   useEffect(() => {
     setMapReady(true);
