@@ -291,6 +291,47 @@ export default function MapView() {
     loadOutbreaks();
   }, []);
 
+  // Fetch Clinics
+  useEffect(() => {
+    if (!showClinics || clinics.length > 0) return;
+    async function loadClinics() {
+      try {
+        const res = await fetch("/api/clinic?lat=10.8505&lng=76.2711"); // Kerala base
+        const data = await res.json();
+        if (data.clinics) setClinics(data.clinics);
+      } catch (err) {
+        console.error("Failed to load clinics:", err);
+      }
+    }
+    loadClinics();
+  }, [showClinics]);
+
+  // Fetch Hotspots/Forecast
+  useEffect(() => {
+    if (!showHotspots || hotspots.length > 0) return;
+    async function loadHotspots() {
+      try {
+        // Fetch global forecast/hotspots
+        const res = await fetch("/api/outbreak?forecast=true"); 
+        const data = await res.json();
+        // Simulate extraction of hotspots from forecast data for visualization
+        // In real app, we'd map district forecast alerts to coordinates
+        if (data.clusters) {
+           const predicted = data.clusters.map(c => ({
+             ...c,
+             predicted: true,
+             lat: c.lat + (Math.random() * 0.1 - 0.05), // Slightly offset for visual clarity
+             lng: c.lng + (Math.random() * 0.1 - 0.05)
+           }));
+           setHotspots(predicted);
+        }
+      } catch (err) {
+        console.error("Failed to load hotspots:", err);
+      }
+    }
+    loadHotspots();
+  }, [showHotspots]);
+
   // Real-time Supabase subscription
   useEffect(() => {
     const channel = supabase
