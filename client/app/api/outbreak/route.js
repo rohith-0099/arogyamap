@@ -71,8 +71,32 @@ function detectClusters(reports) {
   return clusters;
 }
 
-export async function GET() {
+export async function GET(request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const forecast = searchParams.get("forecast") === "true";
+
+    // If forecast requested, proxy to Python backend for Prophet results
+    if (forecast) {
+      const pythonUrl = process.env.NEXT_PUBLIC_PYTHON_API_URL || "http://localhost:8000";
+      const res = await fetch(`${pythonUrl}/analytics/forecast`);
+      if (res.ok) {
+        const data = await res.json();
+        // Return clusters + forecast metadata
+        const since = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+        const { data: reports } = await supabaseAdmin
+          .from("reports")
+          .select("id, lat, lng, city, symptoms_summary, urgency, timestamp")
+          .gte("timestamp", since)
+          .not("lat", "is", null);
+        
+        return NextResponse.json({ 
+          clusters: detectClusters(reports ?? []),
+          forecast: data 
+        });
+      }
+    }
+
     const since = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
 
     const { data, error } = await supabaseAdmin
