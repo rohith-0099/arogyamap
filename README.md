@@ -9,7 +9,8 @@ pinned: false
 license: mit
 ---
 
-# ArogyaMap Backend
+# ArogyaMap
+# Backend
 
 FastAPI service powering <https://arogyamap.vercel.app>. Handles voice/photo triage
 (Groq + LLaVA), Telegram bot, email poller, cough detection (librosa), and
