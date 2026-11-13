@@ -80,7 +80,7 @@ A `Dockerfile` is included that runs the backend on port 7860, for Hugging Face 
 
 ## Acknowledgements
 
-Map and clinic data © OpenStreetMap contributors. ArogyaMap won 1st Prize at INCEPTA '26, organised by the Institution's Innovation Council at NSS College of Engineering.
+Map and clinic data © OpenStreetMap contributors.
 
 ## License
 
